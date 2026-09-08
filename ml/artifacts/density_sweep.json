@@ -1,0 +1,185 @@
+{
+  "data_source": "REAL",
+  "note": "Subsampled Delhi-NCR. Isolates network density from city differences.",
+  "window": [
+    "2025-10-25",
+    "2025-11-21"
+  ],
+  "full_network_stations": 67,
+  "results": [
+    {
+      "n_stations": 5,
+      "median_nn_km": 16.42,
+      "mean_gap_pct": -13.15,
+      "std_gap_pct": 8.67,
+      "runs": [
+        {
+          "seed": 0,
+          "median_nn_km": 10.1,
+          "model_mae": 70.23,
+          "idw_mae": 56.0,
+          "gap_pct": -25.41
+        },
+        {
+          "seed": 1,
+          "median_nn_km": 23.95,
+          "model_mae": 78.59,
+          "idw_mae": 73.34,
+          "gap_pct": -7.16
+        },
+        {
+          "seed": 2,
+          "median_nn_km": 15.2,
+          "model_mae": 69.68,
+          "idw_mae": 65.2,
+          "gap_pct": -6.87
+        }
+      ]
+    },
+    {
+      "n_stations": 8,
+      "median_nn_km": 6.68,
+      "mean_gap_pct": -7.09,
+      "std_gap_pct": 3.37,
+      "runs": [
+        {
+          "seed": 0,
+          "median_nn_km": 7.03,
+          "model_mae": 98.28,
+          "idw_mae": 95.63,
+          "gap_pct": -2.77
+        },
+        {
+          "seed": 1,
+          "median_nn_km": 6.79,
+          "model_mae": 73.5,
+          "idw_mae": 66.22,
+          "gap_pct": -10.99
+        },
+        {
+          "seed": 2,
+          "median_nn_km": 6.21,
+          "model_mae": 55.61,
+          "idw_mae": 51.72,
+          "gap_pct": -7.52
+        }
+      ]
+    },
+    {
+      "n_stations": 12,
+      "median_nn_km": 4.57,
+      "mean_gap_pct": -7.47,
+      "std_gap_pct": 8.65,
+      "runs": [
+        {
+          "seed": 0,
+          "median_nn_km": 2.92,
+          "model_mae": 55.95,
+          "idw_mae": 58.59,
+          "gap_pct": 4.51
+        },
+        {
+          "seed": 1,
+          "median_nn_km": 3.97,
+          "model_mae": 62.21,
+          "idw_mae": 55.91,
+          "gap_pct": -11.27
+        },
+        {
+          "seed": 2,
+          "median_nn_km": 6.81,
+          "model_mae": 61.29,
+          "idw_mae": 53.0,
+          "gap_pct": -15.64
+        }
+      ]
+    },
+    {
+      "n_stations": 20,
+      "median_nn_km": 6.24,
+      "mean_gap_pct": -3.26,
+      "std_gap_pct": 7.0,
+      "runs": [
+        {
+          "seed": 0,
+          "median_nn_km": 7.85,
+          "model_mae": 58.12,
+          "idw_mae": 51.4,
+          "gap_pct": -13.07
+        },
+        {
+          "seed": 1,
+          "median_nn_km": 5.0,
+          "model_mae": 58.18,
+          "idw_mae": 58.43,
+          "gap_pct": 0.43
+        },
+        {
+          "seed": 2,
+          "median_nn_km": 5.87,
+          "model_mae": 68.52,
+          "idw_mae": 70.53,
+          "gap_pct": 2.85
+        }
+      ]
+    },
+    {
+      "n_stations": 35,
+      "median_nn_km": 3.82,
+      "mean_gap_pct": -5.08,
+      "std_gap_pct": 3.63,
+      "runs": [
+        {
+          "seed": 0,
+          "median_nn_km": 3.56,
+          "model_mae": 55.09,
+          "idw_mae": 50.14,
+          "gap_pct": -9.87
+        },
+        {
+          "seed": 1,
+          "median_nn_km": 4.03,
+          "model_mae": 59.46,
+          "idw_mae": 57.02,
+          "gap_pct": -4.28
+        },
+        {
+          "seed": 2,
+          "median_nn_km": 3.87,
+          "model_mae": 61.19,
+          "idw_mae": 60.53,
+          "gap_pct": -1.09
+        }
+      ]
+    },
+    {
+      "n_stations": 55,
+      "median_nn_km": 3.19,
+      "mean_gap_pct": -3.42,
+      "std_gap_pct": 4.22,
+      "runs": [
+        {
+          "seed": 0,
+          "median_nn_km": 3.08,
+          "model_mae": 54.02,
+          "idw_mae": 52.42,
+          "gap_pct": -3.05
+        },
+        {
+          "seed": 1,
+          "median_nn_km": 3.41,
+          "model_mae": 55.99,
+          "idw_mae": 56.88,
+          "gap_pct": 1.56
+        },
+        {
+          "seed": 2,
+          "median_nn_km": 3.08,
+          "model_mae": 58.83,
+          "idw_mae": 54.09,
+          "gap_pct": -8.76
+        }
+      ]
+    }
+  ]
+}

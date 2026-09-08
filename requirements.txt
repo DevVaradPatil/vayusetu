@@ -1,0 +1,43 @@
+# VayuSetu — Python dependencies
+#
+# Split by what each group actually unlocks, so a contributor can run the model
+# harness without a GCP account. Per AGENTS.md §3: do not add a dependency for
+# something the stdlib, an existing dependency, or a Google service already does.
+
+# --- Core: required to run the model harness offline ------------------------
+# `python -m ml.evaluate`, `ml.evaluate_forecast`, `ml.registry` need only these.
+numpy>=1.26,<3
+scikit-learn>=1.4          # quantile GradientBoosting fallback when LightGBM is absent
+jsonschema>=4.21           # validates model cards against spec/*.schema.json
+PyYAML>=6.0                # infra/tenants.yaml, infra/schedulers.yaml
+
+# --- API service ------------------------------------------------------------
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6              # trust-boundary validation of Gemini output and uploads
+python-multipart>=0.0.9    # citizen photo upload (multipart form)
+Pillow>=10.2               # EXIF strip before storage; see AGENTS.md R4
+
+# --- Models -----------------------------------------------------------------
+# LightGBM is preferred; ml/train_grid.py falls back to sklearn if it is missing,
+# so this is technically optional — but the fallback is slower and less accurate.
+lightgbm>=4.3
+
+# --- Google Cloud: required only for the real pipeline ----------------------
+# Every module below degrades gracefully without these installed, which is why the
+# harness runs offline. Nothing here has been exercised against live services yet
+# (see TODO.md), so treat these version floors as provisional.
+google-cloud-bigquery>=3.19
+google-cloud-storage>=2.16
+google-cloud-firestore>=2.16
+google-cloud-aiplatform>=1.47      # Vertex AI training, registry, endpoints
+google-genai>=1.0                   # Gemini. NOT google-generativeai — that package is end-of-life
+google-cloud-translate>=3.15
+google-cloud-texttospeech>=2.16
+earthengine-api>=0.1.395           # MAIAC AOD, Sentinel-5P, ERA5, WorldCover, GHSL
+httpx>=0.27                        # OpenAQ, FIRMS, Open-Meteo
+tenacity>=8.2                      # retry/backoff in ingestion/common.py
+structlog>=24.1                    # JSON logging to stdout for Cloud Run
+
+# --- Dev --------------------------------------------------------------------
+# pytest, ruff, mypy, jupyter — install separately; not needed to run or deploy.

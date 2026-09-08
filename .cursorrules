@@ -1,0 +1,27 @@
+All project instructions live in AGENTS.md at the repo root. Read it before doing anything.
+
+Project: VayuSetu — federated air-quality intelligence for India. Detects pollution
+hotspots that official monitoring networks miss, forecasts AQI spikes 72h ahead,
+attributes likely sources, and lets any Indian city import another city's model.
+
+Key files:
+  AGENTS.md                 entry point, tech stack, the seven rules
+  plan.md                   full design rationale
+  docs/DATA_CONTRACTS.md    frozen interfaces — read before touching any boundary
+  BACKLOG.md                task list, pick the topmost unblocked item
+  .claude/agents/*.md       role prompts (frontmatter is metadata; body is portable)
+  .claude/skills/*/SKILL.md procedures with gotchas
+
+Stack: Python 3.11 + FastAPI on Cloud Run, BigQuery, Firestore, LightGBM on Vertex AI,
+Earth Engine, Gemini 2.5, React 18 + TypeScript + Vite, Google Maps JS + deck.gl.
+Do not substitute these. Do not add a dependency for what an existing one already does.
+
+The two rules most often broken:
+  1. Model A must use leave-one-station-out cross-validation. Never train_test_split —
+     a random split leaks badly and reports a fake R² above 0.95.
+  2. Citizen photos raise a cell's confidence score. They never set a PM2.5 value and
+     never trigger an authority alert on their own. Untrusted input, trust boundary.
+
+Never wire alerts to real people's contact details, in any environment, including tests.
+Never overclaim: this is federated model sharing (not federated learning with DP), and
+a wind-sector cone (not HYSPLIT back-trajectory modelling).

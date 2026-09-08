@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vayusetu.org/spec/model-card.schema.json",
+  "title": "VayuSetu Federated Model Card Schema",
+  "description": "Open schema for sharing and importing air quality prediction models across Indian cities.",
+  "type": "object",
+  "required": [
+    "model_id",
+    "tenant",
+    "task",
+    "trained_on",
+    "features",
+    "performance",
+    "climate_zone",
+    "artifact_uri",
+    "license",
+    "schema_version"
+  ],
+  "properties": {
+    "model_id": {
+      "type": "string",
+      "description": "Unique model version identifier (e.g. delhi-ncr/grid-pm25/v3)"
+    },
+    "tenant": {
+      "type": "string",
+      "description": "Source city or state tenant"
+    },
+    "task": {
+      "type": "string",
+      "enum": ["gridded_pm25_estimation", "72h_aqi_forecast"]
+    },
+    "trained_on": {
+      "type": "object",
+      "required": ["from", "to", "n_rows"],
+      "properties": {
+        "from": { "type": "string", "format": "date" },
+        "to": { "type": "string", "format": "date" },
+        "n_rows": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "performance": {
+      "type": "object",
+      "required": ["loso_mae", "loso_r2", "baseline_idw_mae"],
+      "properties": {
+        "loso_mae": { "type": "number", "description": "Leave-one-station-out Mean Absolute Error (µg/m³)" },
+        "loso_r2": { "type": "number", "description": "Leave-one-station-out R² score" },
+        "baseline_idw_mae": { "type": "number", "description": "Baseline IDW MAE for comparison (µg/m³)" }
+      }
+    },
+    "climate_zone": {
+      "type": "string",
+      "description": "Climate/Airshed region (e.g. indo_gangetic_plain_winter, coastal_tropical)"
+    },
+    "artifact_uri": {
+      "type": "string",
+      "description": "GCS URI of serialized model binary (e.g. gs://vayusetu-registry/delhi-ncr/grid-pm25/v3/model.txt)"
+    },
+    "license": {
+      "type": "string",
+      "const": "Apache-2.0"
+    },
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    }
+  }
+}

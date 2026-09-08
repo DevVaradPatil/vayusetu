@@ -1,0 +1,46 @@
+# Secrets — never commit these. See docs/SUBMISSION_CHECKLIST.md
+.env
+.env.*
+!.env.example
+*-service-account*.json
+*credentials*.json
+*.pem
+*.key
+gcloud-key*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Node / frontend
+node_modules/
+web/dist/
+*.local
+
+# ML artifacts — regenerate with `python -m ml.evaluate`, do not commit binaries.
+# The model CARDS under ml/artifacts/registry/ are provenance and DO belong in git.
+ml/artifacts/*.pkl
+ml/artifacts/*.txt
+ml/artifacts/*.joblib
+
+# Earth Engine / BigQuery scratch
+*.csv.gz
+exports/
+scratch/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local run artifacts
+*.log
+web/.env.local
+experiments/__pycache__/

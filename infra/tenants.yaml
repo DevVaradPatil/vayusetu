@@ -1,0 +1,26 @@
+tenants:
+  ncr:
+    name: "Delhi-NCR"
+    state: "Delhi & Surrounding"
+    bounds:
+      lat_min: 28.20
+      lon_min: 76.80
+      lat_max: 28.95
+      lon_max: 77.60
+    dataset: "vayusetu_ncr"
+    description: "Delhi, Gurugram, Noida, Ghaziabad, Faridabad corridor"
+
+  lko:
+    name: "Lucknow"
+    state: "Uttar Pradesh"
+    bounds:
+      lat_min: 26.70
+      lon_min: 80.80
+      lat_max: 26.99
+      lon_max: 81.10
+    dataset: "vayusetu_lko"
+    description: "Lucknow urban area"
+
+shared:
+  dataset: "vayusetu_shared"
+  fire_buffer_km: 200

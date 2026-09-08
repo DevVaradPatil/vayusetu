@@ -1,0 +1,18 @@
+Loaded REAL data: 35198 rows, 67 stations, 18 features
+Window: 2025-10-25 00:00 -> 2025-11-19 18:00
+
+
+--- LOSO evaluation (AGENTS.md R1, R2) ---
+  Data source : REAL
+  Method      : leave_one_station_out
+  Rows        : 35198 across 67 stations
+
+  Model A        MAE= 54.57  RMSE= 78.37  R2= 0.5297  bias=-1.03
+  IDW baseline   MAE= 52.93  RMSE= 80.81  R2= 0.5000
+  Station mean   MAE= 90.73  RMSE=114.65  R2=-0.0064
+
+  Verdict     : DOES NOT beat IDW (-3.1% MAE vs IDW)
+  Per-station MAE spread (std): 22.58
+  Worst station: openaq:6936  MAE=123.63  (n=518)
+
+  Written: ml\artifacts\evaluation_metrics.json

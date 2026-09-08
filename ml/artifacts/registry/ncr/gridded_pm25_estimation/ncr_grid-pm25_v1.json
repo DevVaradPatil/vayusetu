@@ -1,0 +1,51 @@
+{
+  "model_id": "ncr/grid-pm25/v1",
+  "tenant": "ncr",
+  "task": "gridded_pm25_estimation",
+  "trained_on": {
+    "from": "2024-10-20",
+    "to": "2024-10-30",
+    "n_rows": 2880
+  },
+  "features": [
+    "aod_maiac",
+    "s5p_no2",
+    "s5p_aer_ai",
+    "cloud_fraction",
+    "wind_u",
+    "wind_v",
+    "wind_speed",
+    "wind_dir",
+    "blh",
+    "temp_c",
+    "rh",
+    "precip_mm",
+    "population",
+    "builtup_frac",
+    "cropland_frac",
+    "elevation_m",
+    "dist_major_road_m",
+    "hour_of_day",
+    "day_of_week",
+    "day_of_year_sin",
+    "day_of_year_cos",
+    "is_stubble_season"
+  ],
+  "performance": {
+    "loso_mae": 15.28,
+    "loso_r2": 0.8693,
+    "baseline_idw_mae": 19.75
+  },
+  "climate_zone": "indo_gangetic_plain_winter",
+  "artifact_uri": "gs://vayusetu-registry/ncr/grid-pm25/v1/model.pkl",
+  "license": "Apache-2.0",
+  "schema_version": "1.0.0",
+  "data_source": "SYNTHETIC \u2014 placeholder, not a result. See TODO.md",
+  "limitations": [
+    "Trained on synthetic placeholder data; not validated on real observations.",
+    "Synthetic targets are a smooth function of the features, so LOSO R2 here is optimistic relative to what real station data will produce.",
+    "Covers a 10-day autumn window only; unvalidated for monsoon or summer."
+  ],
+  "published_at": "2026-09-07T06:12:07.141888+00:00",
+  "registry_schema": "vayusetu/model-card/1.0.0"
+}

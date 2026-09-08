@@ -1,0 +1,471 @@
+{
+  "data_source": "REAL",
+  "evaluation_method": "leave_one_station_out",
+  "n_rows": 35198,
+  "n_stations": 67,
+  "model_a_loso": {
+    "mae": 54.68,
+    "rmse": 80.06,
+    "r2": 0.5092,
+    "bias": -6.41
+  },
+  "baselines": {
+    "idw_k4_p2_max50km": {
+      "mae": 52.93,
+      "rmse": 80.81,
+      "r2": 0.5,
+      "bias": -1.94
+    },
+    "station_mean": {
+      "mae": 90.73,
+      "rmse": 114.65,
+      "r2": -0.0064,
+      "bias": -0.02
+    }
+  },
+  "beats_idw": false,
+  "mae_std_across_stations": 29.49,
+  "per_station": [
+    {
+      "station_id": "openaq:6125489",
+      "n": 206,
+      "mae": 181.84,
+      "r2": -4.2446
+    },
+    {
+      "station_id": "openaq:6359",
+      "n": 532,
+      "mae": 125.37,
+      "r2": -6.5853
+    },
+    {
+      "station_id": "openaq:6936",
+      "n": 518,
+      "mae": 124.63,
+      "r2": 0.1551
+    },
+    {
+      "station_id": "openaq:5626",
+      "n": 569,
+      "mae": 119.68,
+      "r2": -0.5848
+    },
+    {
+      "station_id": "openaq:6119272",
+      "n": 325,
+      "mae": 111.64,
+      "r2": 0.101
+    },
+    {
+      "station_id": "openaq:10900",
+      "n": 260,
+      "mae": 106.96,
+      "r2": -5.5903
+    },
+    {
+      "station_id": "openaq:8472",
+      "n": 571,
+      "mae": 94.89,
+      "r2": 0.1947
+    },
+    {
+      "station_id": "openaq:5622",
+      "n": 544,
+      "mae": 93.04,
+      "r2": -2.3593
+    },
+    {
+      "station_id": "openaq:10921",
+      "n": 531,
+      "mae": 88.72,
+      "r2": -0.2792
+    },
+    {
+      "station_id": "openaq:5630",
+      "n": 545,
+      "mae": 88.21,
+      "r2": -10.3051
+    },
+    {
+      "station_id": "openaq:10919",
+      "n": 560,
+      "mae": 87.46,
+      "r2": 0.2369
+    },
+    {
+      "station_id": "openaq:3409519",
+      "n": 554,
+      "mae": 84.03,
+      "r2": -0.9946
+    },
+    {
+      "station_id": "openaq:6934",
+      "n": 568,
+      "mae": 77.49,
+      "r2": 0.0329
+    },
+    {
+      "station_id": "openaq:4663956",
+      "n": 596,
+      "mae": 73.2,
+      "r2": -1.1019
+    },
+    {
+      "station_id": "openaq:6924",
+      "n": 484,
+      "mae": 70.22,
+      "r2": -0.66
+    },
+    {
+      "station_id": "openaq:11607",
+      "n": 524,
+      "mae": 67.76,
+      "r2": -2.211
+    },
+    {
+      "station_id": "openaq:5665",
+      "n": 471,
+      "mae": 66.93,
+      "r2": 0.3628
+    },
+    {
+      "station_id": "openaq:5616",
+      "n": 556,
+      "mae": 65.99,
+      "r2": 0.1836
+    },
+    {
+      "station_id": "openaq:6932",
+      "n": 558,
+      "mae": 65.49,
+      "r2": 0.4413
+    },
+    {
+      "station_id": "openaq:5541",
+      "n": 549,
+      "mae": 65.42,
+      "r2": 0.4285
+    },
+    {
+      "station_id": "openaq:5613",
+      "n": 525,
+      "mae": 58.2,
+      "r2": 0.59
+    },
+    {
+      "station_id": "openaq:50",
+      "n": 553,
+      "mae": 57.1,
+      "r2": 0.4483
+    },
+    {
+      "station_id": "openaq:7005",
+      "n": 520,
+      "mae": 55.76,
+      "r2": 0.5907
+    },
+    {
+      "station_id": "openaq:6105800",
+      "n": 596,
+      "mae": 55.2,
+      "r2": 0.5849
+    },
+    {
+      "station_id": "openaq:10485",
+      "n": 566,
+      "mae": 54.74,
+      "r2": 0.6973
+    },
+    {
+      "station_id": "openaq:10825",
+      "n": 457,
+      "mae": 53.17,
+      "r2": 0.1536
+    },
+    {
+      "station_id": "openaq:10831",
+      "n": 548,
+      "mae": 52.87,
+      "r2": 0.6823
+    },
+    {
+      "station_id": "openaq:301",
+      "n": 455,
+      "mae": 50.69,
+      "r2": -1.4756
+    },
+    {
+      "station_id": "openaq:11603",
+      "n": 430,
+      "mae": 48.78,
+      "r2": 0.679
+    },
+    {
+      "station_id": "openaq:10486",
+      "n": 563,
+      "mae": 48.65,
+      "r2": 0.6145
+    },
+    {
+      "station_id": "openaq:6358",
+      "n": 543,
+      "mae": 47.22,
+      "r2": 0.5774
+    },
+    {
+      "station_id": "openaq:6953",
+      "n": 508,
+      "mae": 47.02,
+      "r2": 0.0331
+    },
+    {
+      "station_id": "openaq:8915",
+      "n": 559,
+      "mae": 46.02,
+      "r2": 0.7501
+    },
+    {
+      "station_id": "openaq:10488",
+      "n": 523,
+      "mae": 44.89,
+      "r2": 0.4257
+    },
+    {
+      "station_id": "openaq:5570",
+      "n": 525,
+      "mae": 44.57,
+      "r2": 0.4196
+    },
+    {
+      "station_id": "openaq:2860223",
+      "n": 578,
+      "mae": 43.99,
+      "r2": 0.7046
+    },
+    {
+      "station_id": "openaq:8118",
+      "n": 493,
+      "mae": 43.82,
+      "r2": 0.5538
+    },
+    {
+      "station_id": "openaq:6931",
+      "n": 564,
+      "mae": 43.53,
+      "r2": 0.551
+    },
+    {
+      "station_id": "openaq:10484",
+      "n": 563,
+      "mae": 43.34,
+      "r2": 0.6666
+    },
+    {
+      "station_id": "openaq:5610",
+      "n": 544,
+      "mae": 43.08,
+      "r2": 0.7866
+    },
+    {
+      "station_id": "openaq:235",
+      "n": 549,
+      "mae": 42.92,
+      "r2": 0.7112
+    },
+    {
+      "station_id": "openaq:5586",
+      "n": 569,
+      "mae": 42.29,
+      "r2": 0.4408
+    },
+    {
+      "station_id": "openaq:10920",
+      "n": 464,
+      "mae": 41.67,
+      "r2": -13.3621
+    },
+    {
+      "station_id": "openaq:6938",
+      "n": 557,
+      "mae": 41.5,
+      "r2": 0.748
+    },
+    {
+      "station_id": "openaq:6986",
+      "n": 563,
+      "mae": 41.4,
+      "r2": 0.7263
+    },
+    {
+      "station_id": "openaq:6356",
+      "n": 562,
+      "mae": 41.18,
+      "r2": 0.6086
+    },
+    {
+      "station_id": "openaq:8235",
+      "n": 548,
+      "mae": 40.16,
+      "r2": 0.8036
+    },
+    {
+      "station_id": "openaq:5598",
+      "n": 488,
+      "mae": 39.84,
+      "r2": 0.6486
+    },
+    {
+      "station_id": "openaq:6972",
+      "n": 532,
+      "mae": 39.65,
+      "r2": -0.5963
+    },
+    {
+      "station_id": "openaq:17",
+      "n": 568,
+      "mae": 39.33,
+      "r2": 0.6538
+    },
+    {
+      "station_id": "openaq:8475",
+      "n": 554,
+      "mae": 38.48,
+      "r2": 0.7943
+    },
+    {
+      "station_id": "openaq:5627",
+      "n": 542,
+      "mae": 38.43,
+      "r2": 0.7132
+    },
+    {
+      "station_id": "openaq:8365",
+      "n": 566,
+      "mae": 37.96,
+      "r2": 0.6947
+    },
+    {
+      "station_id": "openaq:6988",
+      "n": 544,
+      "mae": 37.14,
+      "r2": 0.786
+    },
+    {
+      "station_id": "openaq:6978",
+      "n": 558,
+      "mae": 36.3,
+      "r2": 0.7316
+    },
+    {
+      "station_id": "openaq:6980",
+      "n": 552,
+      "mae": 36.24,
+      "r2": 0.6499
+    },
+    {
+      "station_id": "openaq:5404",
+      "n": 569,
+      "mae": 36.12,
+      "r2": 0.6784
+    },
+    {
+      "station_id": "openaq:8917",
+      "n": 563,
+      "mae": 32.03,
+      "r2": 0.8572
+    },
+    {
+      "station_id": "openaq:8239",
+      "n": 544,
+      "mae": 31.4,
+      "r2": 0.7818
+    },
+    {
+      "station_id": "openaq:6960",
+      "n": 563,
+      "mae": 31.32,
+      "r2": 0.8217
+    },
+    {
+      "station_id": "openaq:5634",
+      "n": 546,
+      "mae": 29.33,
+      "r2": 0.7522
+    },
+    {
+      "station_id": "openaq:6957",
+      "n": 567,
+      "mae": 28.77,
+      "r2": 0.8184
+    },
+    {
+      "station_id": "openaq:5650",
+      "n": 551,
+      "mae": 27.07,
+      "r2": 0.7088
+    },
+    {
+      "station_id": "openaq:6929",
+      "n": 566,
+      "mae": 25.57,
+      "r2": 0.8066
+    },
+    {
+      "station_id": "openaq:3410004",
+      "n": 484,
+      "mae": 23.13,
+      "r2": -0.5278
+    },
+    {
+      "station_id": "openaq:10908",
+      "n": 457,
+      "mae": 20.64,
+      "r2": 0.1643
+    },
+    {
+      "station_id": "openaq:3024966",
+      "n": 438,
+      "mae": 18.48,
+      "r2": 0.3155
+    }
+  ],
+  "dataset": {
+    "n_rows": 35198,
+    "n_stations": 67,
+    "n_features": 27,
+    "features_used": [
+      "lat",
+      "lon",
+      "aod_maiac",
+      "s5p_no2",
+      "s5p_aer_ai",
+      "wind_u",
+      "wind_v",
+      "wind_speed",
+      "wind_dir",
+      "blh",
+      "temp_c",
+      "rh",
+      "precip_mm",
+      "population",
+      "builtup_frac",
+      "cropland_frac",
+      "elevation_m",
+      "fire_count_25km_48h",
+      "fire_count_50km_48h",
+      "fire_count_100km_48h",
+      "fire_count_upwind_100km_48h",
+      "fire_frp_upwind_100km_48h",
+      "hour_of_day",
+      "day_of_week",
+      "day_of_year_sin",
+      "day_of_year_cos",
+      "is_stubble_season"
+    ],
+    "pm25_min": 0.0,
+    "pm25_max": 940.9,
+    "pm25_mean": 190.5,
+    "ts_from": "2025-10-25 00:00:00+00:00",
+    "ts_to": "2025-11-19 18:00:00+00:00"
+  }
+}

@@ -1,0 +1,63 @@
+# VayuSetu Cloud Scheduler Job Specifications
+# Managed by Cloud Scheduler -> Cloud Run Jobs
+
+jobs:
+  - name: "vayusetu-ingest-stations-ncr"
+    description: "Hourly OpenAQ station measurement fetcher for Delhi-NCR"
+    schedule: "0 * * * *"
+    timezone: "UTC"
+    job_type: "CloudRunJob"
+    target: "vayusetu-ingestion-runner"
+    command: ["python", "-m", "ingestion.stations", "--tenant", "ncr"]
+    env:
+      GCP_PROJECT_ID: "civicpulse-v2s-01"
+
+  - name: "vayusetu-ingest-stations-lko"
+    description: "Hourly OpenAQ station measurement fetcher for Lucknow"
+    schedule: "0 * * * *"
+    timezone: "UTC"
+    job_type: "CloudRunJob"
+    target: "vayusetu-ingestion-runner"
+    command: ["python", "-m", "ingestion.stations", "--tenant", "lko"]
+    env:
+      GCP_PROJECT_ID: "civicpulse-v2s-01"
+
+  - name: "vayusetu-ingest-fires"
+    description: "Hourly NASA FIRMS active fire fetcher with 200 km buffer"
+    schedule: "15 * * * *"
+    timezone: "UTC"
+    job_type: "CloudRunJob"
+    target: "vayusetu-ingestion-runner"
+    command: ["python", "-m", "ingestion.fires"]
+    env:
+      GCP_PROJECT_ID: "civicpulse-v2s-01"
+
+  - name: "vayusetu-ingest-meteorology-ncr"
+    description: "Hourly Open-Meteo weather forecast for Delhi-NCR"
+    schedule: "30 * * * *"
+    timezone: "UTC"
+    job_type: "CloudRunJob"
+    target: "vayusetu-ingestion-runner"
+    command: ["python", "-m", "ingestion.meteorology", "--tenant", "ncr"]
+    env:
+      GCP_PROJECT_ID: "civicpulse-v2s-01"
+
+  - name: "vayusetu-ingest-meteorology-lko"
+    description: "Hourly Open-Meteo weather forecast for Lucknow"
+    schedule: "35 * * * *"
+    timezone: "UTC"
+    job_type: "CloudRunJob"
+    target: "vayusetu-ingestion-runner"
+    command: ["python", "-m", "ingestion.meteorology", "--tenant", "lko"]
+    env:
+      GCP_PROJECT_ID: "civicpulse-v2s-01"
+
+  - name: "vayusetu-ingest-satellite-ncr"
+    description: "Daily MAIAC AOD & Sentinel-5P satellite extraction for Delhi-NCR"
+    schedule: "30 15 * * *"
+    timezone: "UTC"
+    job_type: "CloudRunJob"
+    target: "vayusetu-ingestion-runner"
+    command: ["python", "-m", "ingestion.satellite", "--tenant", "ncr"]
+    env:
+      GCP_PROJECT_ID: "civicpulse-v2s-01"

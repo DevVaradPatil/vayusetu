@@ -1,0 +1,114 @@
+{
+  "data_source": "SYNTHETIC \u2014 placeholder, not a result. See TODO.md",
+  "evaluation_method": "temporal_holdout",
+  "train_frac": 0.8,
+  "horizons": {
+    "+6h": {
+      "model": {
+        "mae": 14.78,
+        "rmse": 18.8,
+        "r2": 0.9634,
+        "bias": 1.75
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 43.2,
+          "rmse": 47.88,
+          "r2": 0.7623,
+          "bias": -42.69
+        },
+        "climatology": {
+          "mae": 83.6,
+          "rmse": 98.24,
+          "r2": -0.0006,
+          "bias": 2.3
+        }
+      },
+      "beats_persistence": true,
+      "mae_improvement_vs_persistence_pct": 65.8,
+      "interval_coverage_80": 0.785,
+      "n_test": 400
+    },
+    "+24h": {
+      "model": {
+        "mae": 21.13,
+        "rmse": 26.59,
+        "r2": 0.9106,
+        "bias": 0.89
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 33.31,
+          "rmse": 40.73,
+          "r2": 0.7902,
+          "bias": -25.93
+        },
+        "climatology": {
+          "mae": 75.48,
+          "rmse": 88.98,
+          "r2": -0.0011,
+          "bias": 2.9
+        }
+      },
+      "beats_persistence": true,
+      "mae_improvement_vs_persistence_pct": 36.6,
+      "interval_coverage_80": 0.765,
+      "n_test": 400
+    },
+    "+48h": {
+      "model": {
+        "mae": 27.98,
+        "rmse": 35.3,
+        "r2": 0.8161,
+        "bias": -0.28
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 35.3,
+          "rmse": 43.57,
+          "r2": 0.7199,
+          "bias": 2.4
+        },
+        "climatology": {
+          "mae": 69.1,
+          "rmse": 82.32,
+          "r2": -0.0002,
+          "bias": -1.25
+        }
+      },
+      "beats_persistence": true,
+      "mae_improvement_vs_persistence_pct": 20.7,
+      "interval_coverage_80": 0.74,
+      "n_test": 400
+    },
+    "+72h": {
+      "model": {
+        "mae": 36.14,
+        "rmse": 44.72,
+        "r2": 0.6585,
+        "bias": 1.26
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 54.51,
+          "rmse": 67.11,
+          "r2": 0.231,
+          "bias": 30.37
+        },
+        "climatology": {
+          "mae": 63.52,
+          "rmse": 76.53,
+          "r2": -0.0,
+          "bias": 0.12
+        }
+      },
+      "beats_persistence": true,
+      "mae_improvement_vs_persistence_pct": 33.7,
+      "interval_coverage_80": 0.708,
+      "n_test": 400
+    }
+  },
+  "caveats": [
+    "The synthetic target is generated as lag_1 * decay + fire_effect + noise, so persistence carries a systematic bias the model learns trivially. The improvement-over-persistence figures here are therefore inflated and tell you nothing about real skill. On real data, expect 15-25% at +24h, and treat anything much higher as a leak to investigate rather than a result."
+  ]
+}

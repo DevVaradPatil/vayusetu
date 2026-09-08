@@ -1,0 +1,121 @@
+{
+  "data_source": "REAL",
+  "evaluation_method": "temporal_holdout",
+  "train_frac": 0.7,
+  "use_future_met": false,
+  "met_note": "Only meteorology known at issue time. Operationally realistic.",
+  "window": [
+    "2025-10-25",
+    "2025-11-21"
+  ],
+  "horizons": {
+    "+6h": {
+      "n_train": 10942,
+      "n_test": 4690,
+      "model": {
+        "mae": 56.72,
+        "rmse": 82.39,
+        "r2": 0.4543,
+        "bias": -11.27
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 98.05,
+          "rmse": 133.21,
+          "r2": -0.4264,
+          "bias": 3.11
+        },
+        "climatology": {
+          "mae": 88.89,
+          "rmse": 116.4,
+          "r2": -0.0891,
+          "bias": -33.29
+        }
+      },
+      "beats_persistence": true,
+      "improvement_vs_persistence_pct": 42.15,
+      "interval_coverage_80": 0.666
+    },
+    "+24h": {
+      "n_train": 10493,
+      "n_test": 4497,
+      "model": {
+        "mae": 64.1,
+        "rmse": 85.64,
+        "r2": 0.4461,
+        "bias": 21.24
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 53.3,
+          "rmse": 84.51,
+          "r2": 0.4605,
+          "bias": -1.42
+        },
+        "climatology": {
+          "mae": 93.31,
+          "rmse": 119.0,
+          "r2": -0.0696,
+          "bias": -30.35
+        }
+      },
+      "beats_persistence": false,
+      "improvement_vs_persistence_pct": -20.26,
+      "interval_coverage_80": 0.696
+    },
+    "+48h": {
+      "n_train": 9981,
+      "n_test": 4278,
+      "model": {
+        "mae": 79.95,
+        "rmse": 103.47,
+        "r2": 0.2133,
+        "bias": 53.31
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 66.45,
+          "rmse": 97.02,
+          "r2": 0.3082,
+          "bias": 1.43
+        },
+        "climatology": {
+          "mae": 93.53,
+          "rmse": 119.04,
+          "r2": -0.0414,
+          "bias": -23.75
+        }
+      },
+      "beats_persistence": false,
+      "improvement_vs_persistence_pct": -20.32,
+      "interval_coverage_80": 0.587
+    },
+    "+72h": {
+      "n_train": 9456,
+      "n_test": 4053,
+      "model": {
+        "mae": 86.87,
+        "rmse": 111.25,
+        "r2": 0.1173,
+        "bias": 57.7
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 76.3,
+          "rmse": 108.18,
+          "r2": 0.1652,
+          "bias": 14.62
+        },
+        "climatology": {
+          "mae": 97.49,
+          "rmse": 124.59,
+          "r2": -0.1072,
+          "bias": -38.77
+        }
+      },
+      "beats_persistence": false,
+      "improvement_vs_persistence_pct": -13.85,
+      "interval_coverage_80": 0.599
+    }
+  }
+}

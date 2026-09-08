@@ -1,0 +1,153 @@
+{
+  "data_source": "REAL",
+  "evaluation_method": "temporal_holdout",
+  "train_frac": 0.7,
+  "use_future_met": false,
+  "met_note": "Only meteorology known at issue time. Operationally realistic.",
+  "window": [
+    "2025-10-25",
+    "2025-11-21"
+  ],
+  "horizons": {
+    "+6h": {
+      "n_train": 10269,
+      "n_test": 4402,
+      "model": {
+        "mae": 57.77,
+        "rmse": 81.99,
+        "r2": 0.4629,
+        "bias": -5.61
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 93.15,
+          "rmse": 126.63,
+          "r2": -0.281,
+          "bias": -4.73
+        },
+        "diurnal_persistence": {
+          "mae": 54.75,
+          "rmse": 86.52,
+          "r2": 0.402,
+          "bias": 5.43
+        },
+        "climatology": {
+          "mae": 90.41,
+          "rmse": 117.36,
+          "r2": -0.1003,
+          "bias": -35.44
+        }
+      },
+      "beats_persistence": true,
+      "beats_diurnal": false,
+      "improvement_vs_diurnal_pct": -5.52,
+      "improvement_vs_persistence_pct": 37.98,
+      "interval_coverage_80": 0.662
+    },
+    "+24h": {
+      "n_train": 10493,
+      "n_test": 4497,
+      "model": {
+        "mae": 64.1,
+        "rmse": 85.64,
+        "r2": 0.4461,
+        "bias": 21.24
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 53.3,
+          "rmse": 84.51,
+          "r2": 0.4605,
+          "bias": -1.42
+        },
+        "diurnal_persistence": {
+          "mae": 53.3,
+          "rmse": 84.51,
+          "r2": 0.4605,
+          "bias": -1.42
+        },
+        "climatology": {
+          "mae": 93.31,
+          "rmse": 119.0,
+          "r2": -0.0696,
+          "bias": -30.35
+        }
+      },
+      "beats_persistence": false,
+      "beats_diurnal": false,
+      "improvement_vs_diurnal_pct": -20.26,
+      "improvement_vs_persistence_pct": -20.26,
+      "interval_coverage_80": 0.696
+    },
+    "+48h": {
+      "n_train": 8972,
+      "n_test": 3846,
+      "model": {
+        "mae": 84.63,
+        "rmse": 106.9,
+        "r2": 0.1651,
+        "bias": 60.71
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 66.7,
+          "rmse": 97.12,
+          "r2": 0.3108,
+          "bias": 4.03
+        },
+        "diurnal_persistence": {
+          "mae": 55.87,
+          "rmse": 88.95,
+          "r2": 0.4219,
+          "bias": -4.87
+        },
+        "climatology": {
+          "mae": 94.36,
+          "rmse": 119.2,
+          "r2": -0.0382,
+          "bias": -22.88
+        }
+      },
+      "beats_persistence": false,
+      "beats_diurnal": false,
+      "improvement_vs_diurnal_pct": -51.48,
+      "improvement_vs_persistence_pct": -26.88,
+      "interval_coverage_80": 0.568
+    },
+    "+72h": {
+      "n_train": 8309,
+      "n_test": 3561,
+      "model": {
+        "mae": 95.6,
+        "rmse": 121.27,
+        "r2": -0.0418,
+        "bias": 66.71
+      },
+      "baselines": {
+        "persistence": {
+          "mae": 75.1,
+          "rmse": 106.45,
+          "r2": 0.1972,
+          "bias": 15.48
+        },
+        "diurnal_persistence": {
+          "mae": 59.78,
+          "rmse": 95.84,
+          "r2": 0.3493,
+          "bias": -12.5
+        },
+        "climatology": {
+          "mae": 98.07,
+          "rmse": 124.43,
+          "r2": -0.0969,
+          "bias": -36.98
+        }
+      },
+      "beats_persistence": false,
+      "beats_diurnal": false,
+      "improvement_vs_diurnal_pct": -59.92,
+      "improvement_vs_persistence_pct": -27.3,
+      "interval_coverage_80": 0.557
+    }
+  }
+}
