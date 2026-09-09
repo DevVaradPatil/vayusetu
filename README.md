@@ -1,94 +1,134 @@
 <h1>VayuSetu</h1>
 
-**Finding the air pollution that India's monitoring network cannot see.**
+**Why the air is bad right now, which district to act on, and who should act.**
 
 Submission for *Build with AI: Code for Communities — Track 02, Clean Air & Climate Resilience.*
 
 ---
 
-> ### Project status — read before evaluating
+## The idea
+
+India has plenty of AQI dashboards. Every one of them tells you the same thing: a
+number and a colour. None of them tells a district officer **what to do about it**.
+
+VayuSetu answers the three questions that follow the number:
+
+| Question | Answered from |
+|---|---|
+| *What is happening?* | 70 real CPCB stations via OpenAQ |
+| *Why?* | NASA FIRMS fire detections, sectored by ERA5 wind; boundary layer height |
+| *Who should act, and how urgently?* | Gemini, reasoning over the measured evidence |
+
+It then says it again, in the resident's own language.
+
+### A real episode, generated end to end
+
+`GET /api/v1/ncr/episode?ts=2025-11-11T20:00:00Z` — 01:30 IST, the peak of the
+November 2025 Delhi smog event:
+
+> **Severe meteorological trapping combined with 35 upwind fires drives the elevated
+> pollution level.**
 >
-> **This is a working harness, not yet a working system.** The full pipeline is
-> implemented end to end, but it has **never run against real data** — the external
-> API keys it depends on (OpenAQ, NASA FIRMS, Google Earth Engine, Maps) have not
-> been obtained yet. See [`TODO.md`](TODO.md).
+> City PM2.5 reached 406.6 with a boundary layer height of 65.0 metres, creating a
+> collapsed inversion that traps local and incoming emissions. Wind coming from
+> 338.0 degrees carries smoke from 35 upwind fires within the sector. The current
+> pollutant concentration is 2.3 times the 14-day baseline mean.
 >
-> Consequently **every metric currently in this repository comes from synthetic
-> placeholder data** ([`ml/synthetic.py`](ml/synthetic.py)) and is tagged
-> `data_source: SYNTHETIC` in the artifacts. None of it is a result, and none of it
-> should be quoted. [`BACKLOG.md`](BACKLOG.md) marks such tasks `[~]`, not `[x]`.
->
-> We would rather show you an honest half-finished system than a polished
-> misleading one.
+> **IMMEDIATE** — State Pollution Control Board: enforce strict bans on open burning
+> and inspect industrial units
+> **HIGH** — Municipal Corporation: deploy mechanical street sweepers and water
+> sprinklers on arterial roads
+
+Every number in that brief is measured. None is generated.
 
 ---
 
-## The idea
+## What we learned by testing our own idea
 
-Delhi has roughly 40 official air quality monitors for a metropolitan region of
-over 30 million people. Between those stations are blind spots several kilometres
-wide. A brick kiln cluster, a construction site, a landfill fire or a
-waste-burning pocket can push local PM2.5 far above what the nearest official
-monitor reports — and nothing in the current system notices.
+This project started as something else. The original thesis was the **residual** —
+a model's PM2.5 estimate minus interpolation from official stations — with a large
+positive residual read as a hotspot the government network is blind to.
 
-**That gap is the product.** VayuSetu is not another AQI dashboard. Its core output
-is the **residual**:
+We tested it properly, and it does not hold on this data:
 
-```
-residual = model_estimated_PM2.5(cell)  −  interpolation_from_official_stations(cell)
-```
+| Claim tested | Result |
+|---|---|
+| Gridded model (LightGBM) beats IDW interpolation | **No.** Loses at every network density, 5 to 67 stations |
+| Satellite AOD explains where interpolation is wrong | **No.** r = +0.04 |
+| The model earns its place where stations are sparse | **No.** It loses *worse* as the network thins |
+| 72-hour forecaster beats diurnal persistence | **No.** Loses at every horizon (-5.5% to -59.9%) |
+| **Upwind fires + boundary layer explain the episodes** | **Yes.** r = **+0.55** and **-0.42** |
 
-A large positive residual is pollution the regulatory network is structurally
-blind to. Everything else in this repository exists to compute that number, explain
-it, or act on it.
+Full evidence, including the numbers that killed each hypothesis, is in
+[`TODO.md`](TODO.md). Nothing was quietly deleted.
 
-The target output looks like this:
+The measurement that mattered most was catching ourselves: the forecaster looked
+like a **+42% win over persistence** until we asked whether persistence was a fair
+baseline. It is not — PM2.5 has a strong diurnal cycle, so "the value six hours ago"
+is a bad guess for structural reasons. Against *diurnal* persistence (same clock
+hour, previous day) the model loses at every horizon. That flipped a headline result
+from a win to a loss, so the win was dropped.
 
-> *Grid cell 28.63N/77.31E is at an estimated PM2.5 of 310 µg/m³. The nearest
-> official station reads 180. 84,000 people live in this cell. The likely cause is
-> 47 active fire pixels 22 km upwind in Sonipat with a 310° wind at 11 km/h.
-> Confidence 0.78. Three citizen photos in the last hour independently report
-> heavy haze.*
+[`ml/registry.py`](ml/registry.py) enforces this in code: `publish_model_card()`
+refuses any model whose leave-one-station-out MAE is not better than the IDW
+baseline. It refused ours.
+
+**So we built the half that survived contact with the data.** Attribution never
+needed to beat a statistical baseline to be useful — and it is the half no AQI app
+offers.
+
+---
 
 ## How it works
 
 ```
- CPCB/OpenAQ stations ─┐
- NASA FIRMS fires ─────┤
- Sentinel-5P + MAIAC ──┼──▶ BigQuery ──▶ LightGBM ──▶ residual ──▶ hotspot
- ERA5 / Open-Meteo ────┤                (Vertex AI)       │
- Citizen photos ───────┘                                  ▼
-        │                                        Gemini 2.5 Pro
-        └──▶ Gemini 2.5 Flash ──▶ confidence ──▶  source attribution
-                (vision triage)                         │
-                                                        ▼
-                                          multilingual alert (10 languages,
-                                          Translation API + Cloud TTS)
+ CPCB / OpenAQ stations ─┐
+ NASA FIRMS fires ───────┤
+ ERA5 wind + boundary  ──┼──▶ BigQuery ──▶ api/evidence.py ──▶ measured evidence
+ layer (Open-Meteo)      │                                            │
+ MAIAC AOD, GHSL pop ────┘                                            ▼
+ (Earth Engine)                                          Gemini (attribution brief)
+                                                                      │
+                                            ┌─────────────────────────┤
+                                            ▼                         ▼
+                                   R5 verifier (code)        Translation API
+                                   every citation checked    ten Indian languages
 ```
 
-Two models do the work:
+**[`api/evidence.py`](api/evidence.py)** assembles one hour of measured evidence: city
+and worst-station PM2.5, CPCB AQI band, wind bearing, boundary layer height, and the
+fires inside a 30-degree half-angle cone up to 100 km upwind over the previous 48
+hours. Anything unavailable is named in `missing_fields` rather than defaulted.
 
-**Model A — gridded estimator.** Learns PM2.5 from satellite and meteorological
-variables at locations where a station exists, then predicts at the ~6,000 1 km
-cells where none does. Validated by **leave-one-station-out cross-validation**,
-because that is the only protocol that measures the claim actually being made.
+**[`api/gemini/brief.py`](api/gemini/brief.py)** hands that payload to Gemini and gets
+back a cause, a confidence, a narrative, role-addressed actions, caveats, and a public
+advisory.
 
-**Model B — 72-hour forecaster.** Direct multi-horizon (+6/+24/+48/+72 h), quantile
-outputs for confidence bands, benchmarked against persistence and climatology.
+**`verify()` enforces the trust boundary in code, not in the prompt.** Every path in
+`evidence_cited` must exist in the payload; every entry in `missing_fields` must
+appear in the caveats; a brief citing nothing is rejected; actors must name an office,
+never a contact detail. A brief that fails twice raises rather than degrading — a
+silently-degraded brief is indistinguishable from a real one, which is worse than none.
+
+### It is reasoning, not templating
+
+Same prompt, a different day. **10 November** has 9 upwind fires instead of 35, and
+Gemini reclassifies the dominant cause from crop residue burning to *meteorological
+trapping* on its own. The conclusion follows the evidence.
 
 ## Where Google AI does real work
 
-Nothing here is decorative — each of these is load-bearing:
-
 | Service | Job |
 |---|---|
-| **Gemini 2.5 Flash** | Citizen photo triage — haze severity, visibility estimate, source classification, and the validity gate on untrusted uploads |
-| **Gemini 2.5 Pro** | Source-attribution briefs grounded in an assembled evidence payload; the *Ask Vayu* function-calling agent |
-| **Vertex AI** | Model training, registry, versioned serving endpoints |
-| **Earth Engine** | Sentinel-5P NO₂ and aerosol index, MAIAC 1 km AOD, ERA5 meteorology, WorldCover land use, GHSL population |
-| **BigQuery** | Every observation, feature, prediction and backtest |
-| **Translation API + Cloud TTS** | Ten-language advisories with spoken output, for users who will not read a dashboard |
-| **Cloud Run / Scheduler / Firestore / Maps** | Serverless ingestion, live state, mapping |
+| **Gemini 3.5 Flash Lite** | Reasons over fused multi-source evidence into an attribution brief with role-addressed actions — the reasoning step, not a wrapper |
+| **BigQuery** | Every observation, join and aggregation; the evidence assembly is SQL |
+| **Earth Engine** | MAIAC 1 km AOD, Sentinel-5P, WorldCover land use, GHSL population, SRTM elevation |
+| **Cloud Translation** | Ten-language advisories, so the finding reaches people who will never open a dashboard |
+| **Cloud Run / Firestore / Maps** | Serverless service, live state, mapping |
+
+Vertex AI training and serving are wired but currently carry no published model — see
+the falsification table above. We would rather ship an empty registry than a model the
+registry's own guard rejects.
 
 ## Interoperability — the Digital Public Good half
 
@@ -97,85 +137,83 @@ Two open, versioned, Apache-2.0 schemas in [`spec/`](spec/) let independent syst
 compose:
 
 - [`hotspot-event.schema.json`](spec/hotspot-event.schema.json) — how you say *"there
-  is a hotspot here"* in a form another city, a state dashboard, or a third-party
-  app can consume.
+  is an episode here, and this is why"* in a form another city, a state dashboard or a
+  third-party app can consume.
 - [`model-card.schema.json`](spec/model-card.schema.json) — how a city publishes a
   trained model so a city with fewer monitors and no data science team can evaluate
   and import it.
 
-The registry implementation validates against these published files directly
-([`ml/registry.py`](ml/registry.py)), rather than against a copy — a spec the
-implementation does not actually read is decoration.
+[`ml/registry.py`](ml/registry.py) validates against those published files directly
+rather than against a copy — a spec the implementation does not read is decoration.
 
 This is federated **model sharing**: publishing weights and metadata to a shared
-registry. It is *not* federated learning — there is no secure aggregation and no
-differential privacy. See "Limitations" below.
+registry. It is *not* federated learning — no secure aggregation, no differential
+privacy.
 
 ## Quickstart
 
 ```bash
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Run the model harness on synthetic data — no API keys or cloud access needed:
+With `.env` populated (see [`docs/RUNBOOK.md`](docs/RUNBOOK.md)):
 
 ```bash
-python -m ml.evaluate            # Model A, leave-one-station-out CV + baselines
-python -m ml.evaluate_forecast   # Model B, per-horizon vs persistence & climatology
-python -m ml.registry            # publish/import a model card against the open spec
+python -m api.evidence         # assemble measured evidence for the hero episode
+python -m api.gemini.brief     # generate a brief and verify it against R5
+uvicorn api.main:app --reload  # the service
 ```
 
-Every self-check in one go:
+No API keys? The model harness runs standalone on placeholder data:
 
 ```bash
-python -m ml.synthetic && python -m ml.evaluate && python -m ml.evaluate_forecast && python -m ml.registry
+python -m ml.evaluate            # leave-one-station-out CV against a real IDW baseline
+python -m ml.evaluate_forecast   # per-horizon vs persistence and climatology
 ```
-
-For real data, cloud deployment and replay mode, see [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ## Repository
 
 | Path | Contents |
 |---|---|
-| [`plan.md`](plan.md) | Full design rationale — the *why* behind every decision |
 | [`AGENTS.md`](AGENTS.md) | Entry point for contributors and AI agents; the seven project rules |
-| [`docs/DATA_CONTRACTS.md`](docs/DATA_CONTRACTS.md) | Frozen interfaces between workstreams |
-| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | How a new city onboards, with cost estimate |
+| [`TODO.md`](TODO.md) | The findings, including every falsified hypothesis and its evidence |
+| [`plan.md`](plan.md) | Original design rationale, with the superseded sections marked |
+| [`docs/DATA_CONTRACTS.md`](docs/DATA_CONTRACTS.md) | Frozen interfaces; §7a records measured API reality |
 | [`spec/`](spec/) | The open schemas |
-| `ingestion/` `ml/` `api/` `web/` | Pipeline, models, service, frontend |
+| `ingestion/` `ml/` `api/` `web/` | Pipeline, model harness, service, console |
 
 ## Limitations
 
-Stated plainly, because a system that issues alerts to public authorities should
-be honest about what it does not know.
+Stated plainly, because a system that briefs public authorities should be honest
+about what it does not know.
 
-**Not yet validated on real data.** The single largest limitation. Every number
-this repository currently produces comes from synthetic placeholder data. Expect
-real leave-one-station-out R² in the 0.60–0.75 range — meaningfully lower than the
-synthetic harness reports, because the synthetic target is a smooth function of its
-own features.
+**Neither ML model is in the product.** Gridded estimation loses to interpolation;
+forecasting loses to diurnal persistence. Both harnesses remain in the repository so
+the result is reproducible, but no residual map and no forecast is served.
 
-**The gridded product is daily, not hourly.** Satellites pass overhead roughly once
-a day (Sentinel-5P ~13:30 local). The 1 km grid is anchored to that overpass with
-hourly refinement from stations and meteorology. The forecast is hourly. We do not
-have hourly 1 km satellite truth and do not claim it.
+**Attribution is correlational.** r = +0.55 between upwind fire count and city PM2.5
+over 26 days of one stubble season is a real, correctly-signed relationship with a
+clear physical mechanism. It is not a source-apportionment study, and Gemini is
+instructed to return `unknown` with low confidence when the evidence does not support
+a call.
 
-**Winter cloud and fog mask the satellite input.** 30–50% missing MAIAC AOD in
-Delhi winter is normal. Stale satellite data widens confidence bands rather than
-being silently forward-filled.
+**Source attribution is a wind-sector cone, not trajectory modelling.** A 30-degree
+half-angle cone, 100 km upwind. That is not HYSPLIT; multi-day and vertically complex
+transport are out of its reach, and the prompt forbids describing it otherwise.
 
-**"Approximately 1 km", not exactly.** The grid is a 0.01° lattice — about 1.11 km
-north–south and 0.98 km east–west at 28.5°N. A deliberate simplification that avoids
-reprojection in every module.
+**The demo is a replay, and says so.** The hero window is 10–13 November 2025, a real
+Severe episode with 68 of ~70 stations reporting. The same pipeline running live today
+sees 7 stations, because the CPCB-to-OpenAQ feed is largely stalled. Both views are in
+the console; the live one is greyed when stale.
 
-**Source attribution is a wind-sector cone, not trajectory modelling.** We trace a
-±30° cone 100 km upwind. That is not HYSPLIT, and multi-day or vertically complex
-transport is out of its reach.
+**Winter cloud and fog mask the satellite input.** 30–50% missing MAIAC AOD in Delhi
+winter is normal; the gap is disclosed in `missing_fields`, not forward-filled.
 
-**Federated model sharing, not federated learning.** No secure aggregation, no
-differential privacy, no training across parties without sharing data. The
-differentially-private version is future work, not a current capability.
+**Ten languages via machine translation.** The API supports ten; the console exposes
+eight. Translations are Cloud Translation output, not reviewed by native speakers, and
+the endpoint reports `translated: false` rather than labelling English as Hindi when
+the service is unavailable.
 
 **Citizen photos are corroborating evidence only.** They raise a cell's confidence
 score. They never set a PM2.5 value and never trigger an alert on their own —
@@ -184,7 +222,7 @@ untrusted input must not be able to dispatch a government response.
 **Alerts go to mock accounts.** No real official's contact details exist anywhere in
 this codebase, including in tests and demo data.
 
-**Transfer accuracy is unmeasured.** The Delhi→Lucknow import works, but the
+**Transfer accuracy is unmeasured.** The Delhi-to-Lucknow import works, but the
 degradation figure will only be real once Lucknow's own stations have been ingested
 and evaluated. Until then the API returns `transfer_measured: false` rather than an
 estimate.

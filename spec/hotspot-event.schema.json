@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://vayusetu.org/spec/hotspot-event.schema.json",
-  "title": "VayuSetu Hotspot Event Schema",
-  "description": "Open schema for detected air pollution hotspots where satellite/model PM2.5 exceeds station network interpolation.",
+  "title": "VayuSetu Air Quality Episode Event",
+  "description": "Open schema for a pollution episode: what was observed, why it happened, and who should act. One city publishes this; another city, a state dashboard or a third-party app consumes it without knowing anything about the publisher's models.",
   "type": "object",
   "required": [
     "event_id",
@@ -11,17 +11,15 @@
     "timestamp",
     "latitude",
     "longitude",
-    "predicted_pm25",
-    "station_idw_baseline",
-    "residual_pm25",
-    "confidence",
-    "population_exposed",
+    "observed_pm25",
+    "aqi_band",
+    "attribution",
     "schema_version"
   ],
   "properties": {
     "event_id": {
       "type": "string",
-      "description": "Unique identifier for the hotspot event"
+      "description": "Unique identifier for the episode event"
     },
     "tenant": {
       "type": "string",
@@ -29,54 +27,54 @@
     },
     "cell_id": {
       "type": "string",
-      "description": "0.01° grid cell ID (e.g. ncr-2863-7731)"
+      "description": "0.01 degree grid cell ID (e.g. ncr-2863-7731)"
     },
     "timestamp": {
       "type": "string",
       "format": "date-time",
-      "description": "ISO 8601 UTC timestamp of observation"
+      "description": "ISO 8601 UTC timestamp of the observed hour"
     },
     "latitude": {
       "type": "number",
       "minimum": -90,
       "maximum": 90,
-      "description": "Cell center latitude"
+      "description": "Cell centre latitude"
     },
     "longitude": {
       "type": "number",
       "minimum": -180,
       "maximum": 180,
-      "description": "Cell center longitude"
+      "description": "Cell centre longitude"
     },
-    "predicted_pm25": {
+    "observed_pm25": {
       "type": "number",
       "minimum": 0,
-      "description": "Model estimated PM2.5 in µg/m³"
+      "description": "Measured PM2.5 at this location in ug/m3. An observation, not an estimate."
     },
-    "station_idw_baseline": {
-      "type": "number",
+    "aqi_band": {
+      "type": "string",
+      "enum": ["Good", "Satisfactory", "Moderate", "Poor", "Very Poor", "Severe"],
+      "description": "CPCB National AQI band for observed_pm25"
+    },
+    "n_stations_reporting": {
+      "type": "integer",
       "minimum": 0,
-      "description": "Nearest station Inverse Distance Weighting estimate in µg/m³"
-    },
-    "residual_pm25": {
-      "type": "number",
-      "description": "The residual: predicted_pm25 - station_idw_baseline"
-    },
-    "confidence": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 1,
-      "description": "Confidence score [0, 1]"
+      "description": "How many stations contributed to the city aggregate for this hour"
     },
     "population_exposed": {
       "type": "integer",
       "minimum": 0,
-      "description": "Estimated population living within the 1 km grid cell"
+      "description": "Estimated population living within the grid cell"
     },
     "attribution": {
       "type": "object",
+      "description": "Why the episode happened. The drivers are measured; the narrative is generated from them and must cite them.",
+      "required": ["cause_category", "confidence", "narrative", "evidence_cited"],
       "properties": {
-        "cause": { "type": "string" },
+        "cause": {
+          "type": "string",
+          "description": "One sentence naming the dominant driver"
+        },
         "cause_category": {
           "type": "string",
           "enum": [
@@ -91,17 +89,102 @@
             "unknown"
           ]
         },
-        "confidence": { "type": "number" },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "narrative": {
+          "type": "string",
+          "description": "Human-readable explanation an official can act on"
+        },
         "evidence_cited": {
           "type": "array",
-          "items": { "type": "string" }
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Dotted paths into drivers/ that the narrative relies on. A narrative citing nothing is not publishable."
         },
-        "narrative": { "type": "string" }
+        "caveats": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Known gaps, including every field the publisher could not measure"
+        },
+        "drivers": {
+          "type": "object",
+          "description": "The measured quantities behind the attribution. A consumer can re-derive the conclusion from these.",
+          "properties": {
+            "upwind_fire_count": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Fire detections inside the upwind sector in the preceding window"
+            },
+            "upwind_sector_deg": {
+              "type": "number",
+              "description": "Half-angle of the upwind cone in degrees. This is a wind-sector cone, NOT back-trajectory modelling."
+            },
+            "upwind_radius_km": { "type": "number" },
+            "fire_window_hours": { "type": "integer" },
+            "total_frp_mw": {
+              "type": "number",
+              "description": "Summed fire radiative power of the upwind detections"
+            },
+            "boundary_layer_m": {
+              "type": "number",
+              "description": "Boundary layer height in metres. Below ~200 m indicates a collapsed inversion."
+            },
+            "wind_from_bearing_deg": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 360,
+              "description": "Direction the wind comes FROM, degrees clockwise from north"
+            },
+            "wind_speed_ms": { "type": "number", "minimum": 0 },
+            "ratio_to_baseline": {
+              "type": "number",
+              "minimum": 0,
+              "description": "observed_pm25 divided by the trailing 14-day mean"
+            }
+          }
+        }
       }
+    },
+    "recommended_actions": {
+      "type": "array",
+      "description": "Who should act. Names a role or office, never a person and never a contact detail.",
+      "items": {
+        "type": "object",
+        "required": ["actor", "action", "urgency"],
+        "properties": {
+          "actor": { "type": "string" },
+          "action": { "type": "string" },
+          "urgency": {
+            "type": "string",
+            "enum": ["low", "medium", "high", "immediate"]
+          }
+        }
+      }
+    },
+    "public_advisory": {
+      "type": "string",
+      "description": "One plain sentence for residents, in English. Consumers translate for their own population."
+    },
+    "predicted_pm25": {
+      "type": "number",
+      "minimum": 0,
+      "description": "OPTIONAL. Model-estimated PM2.5 in ug/m3, for publishers that run a gridded estimator."
+    },
+    "station_idw_baseline": {
+      "type": "number",
+      "minimum": 0,
+      "description": "OPTIONAL. Inverse-distance-weighted estimate from surrounding stations in ug/m3."
+    },
+    "residual_pm25": {
+      "type": "number",
+      "description": "OPTIONAL. predicted_pm25 minus station_idw_baseline. Publish this only alongside evidence that the estimator beats the IDW baseline under leave-one-station-out validation; otherwise the residual is model error, not a discovered hotspot. Required in schema 1.0.0; optional since 2.0.0."
     },
     "schema_version": {
       "type": "string",
-      "const": "1.0.0"
+      "const": "2.0.0"
     }
   }
 }

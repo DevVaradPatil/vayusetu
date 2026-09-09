@@ -85,6 +85,23 @@ def get_episode(
     return out
 
 
+@router.get("/{tenant}/event", summary="The episode in the open interchange format")
+def get_event(
+    tenant: str,
+    ts: str = Query(...),
+) -> Dict[str, Any]:
+    """
+    The same episode as `/episode`, shaped as `spec/hotspot-event.schema.json` v2.0.0
+    so another city, a state dashboard or a third-party app can consume it without
+    knowing anything about how we produced it.
+
+    This is the Digital Public Good surface: observation, measured drivers, and the
+    reasoning that connects them.
+    """
+    ep = get_episode(tenant, ts, explain=True)
+    return evidence_mod.to_event(ep["evidence"], ep.get("brief"))
+
+
 @router.get("/{tenant}/timeline", summary="Daily PM2.5 against its physical drivers")
 def get_timeline(
     tenant: str,

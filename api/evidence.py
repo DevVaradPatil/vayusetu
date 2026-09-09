@@ -233,6 +233,70 @@ def assemble(
     )
 
 
+def to_event(evidence: Dict[str, Any], brief: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Render one episode in the open interchange format (spec/hotspot-event.schema.json).
+
+    This is the federation boundary: a consuming city gets the observation, the
+    measured drivers, and the reasoning that connects them — enough to re-derive the
+    conclusion without trusting our model, or knowing we have one.
+
+    Deliberately omits `residual_pm25` and friends. They are optional in schema 2.0.0
+    and we have no estimator that beats IDW, so publishing a residual here would be
+    publishing model error as a finding (TODO.md 2026-09-08b).
+    """
+    w = evidence["worst_station"]
+    fires = evidence.get("upwind_fires") or {}
+    wind = evidence.get("wind") or {}
+    brief = brief or {}
+
+    lat, lon = float(w["lat"]), float(w["lon"])
+    ts = evidence["ts"]
+
+    # Drop unmeasured drivers rather than emitting nulls: the schema types them as
+    # numbers, and a consumer must be able to tell "no fires" from "we didn't look".
+    drivers = {
+        "upwind_fire_count": fires.get("count", 0),
+        "upwind_sector_deg": fires.get("sector_deg"),
+        "upwind_radius_km": fires.get("radius_km"),
+        "fire_window_hours": fires.get("window_h"),
+        "total_frp_mw": fires.get("total_frp_mw"),
+        "boundary_layer_m": evidence.get("boundary_layer_m"),
+        "wind_from_bearing_deg": wind.get("from_bearing_deg"),
+        "wind_speed_ms": wind.get("speed_ms"),
+        "ratio_to_baseline": (evidence.get("comparison") or {}).get("ratio_to_baseline"),
+    }
+    drivers = {k: v for k, v in drivers.items() if v is not None}
+
+    return {
+        "event_id": f"{evidence['tenant']}-{ts}-{w['name']}".replace(" ", "_"),
+        "tenant": evidence["tenant"],
+        "cell_id": f"{evidence['tenant']}-{math.floor(lat / 0.01):d}-{math.floor(lon / 0.01):d}",
+        "timestamp": ts,
+        "latitude": lat,
+        "longitude": lon,
+        "observed_pm25": w["pm25"],
+        "aqi_band": w["aqi_band"],
+        "n_stations_reporting": evidence["n_stations_reporting"],
+        **({"population_exposed": evidence["population_exposed"]}
+           if evidence.get("population_exposed") is not None else {}),
+        "attribution": {
+            "cause": brief.get("cause", ""),
+            "cause_category": brief.get("cause_category", "unknown"),
+            "confidence": brief.get("confidence", 0.0),
+            "narrative": brief.get("narrative", ""),
+            "evidence_cited": brief.get("evidence_cited") or ["upwind_fires.count"],
+            "caveats": (brief.get("caveats") or []) + evidence.get("missing_fields", []),
+            "drivers": drivers,
+        },
+        **({"recommended_actions": brief["recommended_actions"]}
+           if brief.get("recommended_actions") else {}),
+        **({"public_advisory": brief["public_advisory"]}
+           if brief.get("public_advisory") else {}),
+        "schema_version": "2.0.0",
+    }
+
+
 def demo() -> None:
     """Assemble evidence for the frozen hero episode."""
     # The frozen hero episode: 2025-11-11 20:00Z = 01:30 IST, the peak of the real
@@ -251,6 +315,23 @@ def demo() -> None:
           f"{ev.upwind_fires['total_fires_within_radius']} within {UPWIND_RADIUS_KM:.0f} km")
     if ev.missing_fields:
         print(f"[OK] disclosed missing: {ev.missing_fields}")
+
+    # The federation claim is only real if what we emit validates against the schema
+    # we publish. Checked without Gemini so it runs on every change, not just when
+    # quota allows.
+    import json
+    import pathlib
+    import jsonschema
+
+    schema = json.loads(
+        (pathlib.Path(__file__).parent.parent / "spec" / "hotspot-event.schema.json")
+        .read_text(encoding="utf-8")
+    )
+    event = to_event(ev.to_dict())
+    jsonschema.validate(event, schema)
+    assert "residual_pm25" not in event, "we have no estimator that beats IDW"
+    print(f"[OK] event validates against spec/hotspot-event.schema.json "
+          f"({len(event['attribution']['drivers'])} drivers)")
 
 
 if __name__ == "__main__":
