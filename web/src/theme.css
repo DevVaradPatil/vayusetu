@@ -1,0 +1,180 @@
+/*
+ * VayuSetu console theme.
+ *
+ * Material 3 token structure (surface roles, tonal containers, state layers) with
+ * the M3 baseline blue scheme. These are hand-written tokens following the M3
+ * naming and role system, not the @material/web package: the console is mostly
+ * map and data surfaces, so importing a component library and overriding it would
+ * have been dishonest weight.
+ *
+ * COLOR LOCK
+ *   Blue is the interface. Every interactive, selected or focused thing is blue.
+ *   The warm ramp (green through dark red) is DATA ONLY: it is the CPCB National
+ *   AQI scale, which the public already reads. The two never swap jobs, so a
+ *   colour on this page always means the same thing.
+ *
+ * SHAPE LOCK
+ *   Panels and cards 16px. Chips, buttons and pills fully rounded. Inputs and
+ *   small controls 8px. Nothing else.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: M3 dark tonal ladder. Never pure black. */
+  --surface:                    #121317;
+  --surface-container-lowest:   #0d0e11;
+  --surface-container-low:      #1a1b20;
+  --surface-container:          #1e1f25;
+  --surface-container-high:     #282a31;
+  --surface-container-highest:  #33353d;
+
+  --on-surface:          #e4e2e6;
+  --on-surface-variant:  #c5c6d0;
+  --on-surface-dim:      #8e909a;
+
+  --outline:          #8e909a;
+  --outline-variant:  #35363d;
+
+  /* Primary: M3 baseline blue, dark scheme. Interface only. */
+  --primary:               #a8c7fa;
+  --on-primary:            #062e6f;
+  --primary-container:     #274777;
+  --on-primary-container:  #d3e3fd;
+
+  /* Error role, for genuine failure states only. Not for high pollution: that
+     is data and uses the AQI ramp. */
+  --error:             #ffb4ab;
+  --on-error:          #690005;
+  --error-container:   #93000a;
+
+  /* CPCB National AQI scale for PM2.5. Standardised palette, do not restyle. */
+  --aqi-good:       #22c55e;
+  --aqi-satis:      #84cc16;
+  --aqi-moderate:   #eab308;
+  --aqi-poor:       #f97316;
+  --aqi-verypoor:   #dc2626;
+  --aqi-severe:     #991b1b;
+  --fire:           #fb923c;
+
+  /* Shape */
+  --r-panel: 16px;
+  --r-small: 8px;
+  --r-pill:  999px;
+
+  /* M3 emphasized easing. Motion here is motivated: it shows data arriving or
+     the analysis moving to a new hour, never decoration. */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur-short: 180ms;
+  --dur-medium: 320ms;
+
+  --font: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Roboto Mono', ui-monospace, 'Cascadia Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--on-surface);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every measured number is monospaced and tabular, so digits line up between
+   updates and a value changing does not shift the layout around it. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--r-small);
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.rise { animation: rise var(--dur-medium) var(--ease) both; }
+.fade { animation: fade var(--dur-medium) var(--ease) both; }
+
+/* Skeletons match the shape of the content they stand in for, so nothing jumps
+   when the real data lands. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-container-high);
+  border-radius: var(--r-small);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent);
+  animation: sweep 1.4s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* The Google Maps info window is rendered outside React, so it is themed here. */
+.gm-style .gm-style-iw-c {
+  background: var(--surface-container-high) !important;
+  border-radius: var(--r-panel) !important;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.5) !important;
+  padding: 0 !important;
+}
+.gm-style .gm-style-iw-d { overflow: hidden !important; padding: 0 !important; }
+.gm-style .gm-style-iw-tc::after { background: var(--surface-container-high) !important; }
+.gm-style .gm-style-iw-c button[aria-label="Close"] { display: none !important; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Layout that needs breakpoints. Inline styles cannot express a media query, so
+   the responsive rules live here rather than being left to chance. */
+.app-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  min-height: min(74vh, 720px);
+}
+
+/* Below 1100px the side-by-side map and brief both become too narrow to read, so
+   they stack: map first, because it is what orients the reader. */
+@media (max-width: 1100px) {
+  .app-grid {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+  .app-grid > .map-panel { min-height: 54vh; }
+  .app-grid > .brief-panel { max-height: none; }
+}
+
+@media (max-width: 640px) {
+  .app-bar { align-items: flex-start; }
+  .app-bar .bar-meta { width: 100%; }
+  .map-controls { gap: 4px; }
+  .map-legend { display: none; }   /* the map itself is the priority on a phone */
+}
