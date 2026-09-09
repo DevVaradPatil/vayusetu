@@ -24,6 +24,19 @@ import math
 import os
 import yaml
 from pathlib import Path
+
+# Load .env before anything imports os.environ at module scope. Without this the
+# service starts fine and then 500s on the first BigQuery call, which is a
+# confusing way to discover a missing variable. setdefault, so a real environment
+# (Cloud Run) always wins over the local file.
+_ENV_FILE = Path(__file__).parent.parent / ".env"
+if _ENV_FILE.exists():
+    for _line in _ENV_FILE.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _v = _line.split("=", 1)
+            os.environ.setdefault(_k.strip(), _v.strip())
+
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any
 

@@ -34,7 +34,7 @@ interface Day {
 }
 interface Station { station_id: string; name: string; lat: number; lon: number; pm25: number; aqi_band: string; }
 interface Fire { lat: number; lon: number; frp: number; acq_ts: string; }
-interface MapData { stations: Station[]; fires: Fire[]; wind: { from_bearing_deg: number | null; speed_ms: number | null }; boundary_layer_m: number | null; }
+interface MapData { stations: Station[]; fires: Fire[]; }
 interface Brief {
   cause: string; cause_category: string; confidence: number;
   evidence_cited: string[]; narrative: string;
@@ -224,7 +224,11 @@ function SectorMap({ data, ev }: { data: MapData | null; ev: any }) {
 
   if (!data) return <div style={{ ...S.mapBox, height: H }} />;
 
-  const wind = data.wind.from_bearing_deg;
+  // Wind comes from the evidence, not the map payload: it is the same bearing that
+  // selected the upwind fires and that the brief cites. Drawing the cone from a
+  // city-average bearing put a different number on screen than the one the analysis
+  // used.
+  const wind = ev.wind.from_bearing_deg;
   const ws = ev?.worst_station;
 
   return (

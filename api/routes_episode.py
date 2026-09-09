@@ -14,6 +14,7 @@ repeatedly — so regenerating would burn quota to produce the same paragraph.
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -27,6 +28,14 @@ router = APIRouter(prefix="/api/v1", tags=["episode"])
 
 # (tenant, iso-hour) -> {"evidence":..., "brief":...}
 _BRIEF_CACHE: Dict[tuple, Dict[str, Any]] = {}
+
+# Endpoints are sync, so FastAPI runs them in a threadpool: without this, a page load
+# that fires three requests, or two judges refreshing at once, each miss the cache and
+# each start their own Gemini call for the identical hour. Gemini is capped at 500
+# requests/day, so that is the one resource worth serialising.
+# ponytail: one global lock, not per-key — generation is ~10s and the demo is a
+# handful of hours; make it per-key if concurrent distinct episodes ever matter.
+_GENERATION_LOCK = threading.Lock()
 
 
 def _parse_ts(ts: Optional[str]) -> datetime:
@@ -62,6 +71,17 @@ def get_episode(
         cached["cached"] = True
         return cached
 
+    with _GENERATION_LOCK:
+        # Re-check: whoever held the lock may have just generated this exact hour.
+        if key in _BRIEF_CACHE:
+            cached = dict(_BRIEF_CACHE[key])
+            cached["cached"] = True
+            return cached
+        return _build_episode(tenant, at, key, explain)
+
+
+def _build_episode(tenant: str, at: datetime, key: tuple, explain: bool) -> Dict[str, Any]:
+    """Assemble and explain one episode. Callers hold _GENERATION_LOCK."""
     try:
         ev = evidence_mod.assemble(at, tenant=tenant)
     except ValueError as e:
@@ -190,22 +210,18 @@ def get_map(
         """).result()
     ]
 
-    met = list(client.query(f"""
-        SELECT AVG(wind_dir) AS wd, AVG(wind_speed) AS ws, AVG(blh) AS blh
-        FROM `{project}.vayusetu_{tenant}.raw_meteorology`
-        WHERE is_forecast = FALSE AND ts = TIMESTAMP('{ts_str}')
-    """).result())
-
+    # Deliberately no wind or boundary layer here. This used to return AVG(wind_dir)
+    # across every cell, which is wrong twice over: an arithmetic mean of bearings is
+    # meaningless (350 and 10 average to 180, the opposite direction), and a city
+    # average disagrees with the worst-station bearing that actually selected the
+    # upwind fires. The console drew its cone from this while the brief cited the
+    # other, showing two different winds for one hour. Meteorology has one source:
+    # /episode.
     return {
         "tenant": tenant,
         "ts": at.isoformat(),
         "stations": stations,
         "fires": fires,
-        "wind": {
-            "from_bearing_deg": round(float(met[0].wd), 1) if met and met[0].wd else None,
-            "speed_ms": round(float(met[0].ws), 2) if met and met[0].ws else None,
-        },
-        "boundary_layer_m": round(float(met[0].blh), 0) if met and met[0].blh else None,
     }
 
 
