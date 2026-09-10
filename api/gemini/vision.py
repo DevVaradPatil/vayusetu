@@ -1,9 +1,20 @@
 """
-api/gemini/vision.py — Gemini 2.5 Flash Citizen Photo Triage Module.
+api/gemini/vision.py — Citizen photo triage with Gemini vision.
 
-Grades citizen uploaded haze photos using Gemini 2.5 Flash multimodal vision API.
-Enforces Pydantic model validation and strict JSON schema output matching docs/DATA_CONTRACTS.md §3.
+A resident's photo is untrusted input. This module decides whether it is a genuine
+outdoor photograph and, if so, grades the haze in it. It never produces a PM2.5
+value: a photo is corroborating evidence that can raise confidence in what the
+sensors already show, and nothing more (AGENTS.md R4).
+
+There is deliberately no fallback analysis. The previous version returned a fixed
+"heavy haze, crop burning, confidence 0.81" whenever the Gemini call failed, which
+on a clean deploy was every call (it imported the end-of-life google.generativeai,
+which is not in requirements.txt). A blue-sky photo was graded as smoke. On a trust
+boundary a made-up answer is worse than no answer, so failure now raises and the
+endpoint says the triage is unavailable.
 """
+
+from __future__ import annotations
 
 import json
 import logging
@@ -15,108 +26,149 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger("vayusetu.gemini.vision")
 
 
-# Closed Enums matching docs/DATA_CONTRACTS.md §3
-VALID_REJECTION_REASONS = {
-    "indoor", "no_sky_visible", "screenshot_or_graphic", "too_dark", "blurred", "not_a_photo", "other"
-}
+# Closed enums matching docs/DATA_CONTRACTS.md §3
+REJECTION_REASONS = ["indoor", "no_sky_visible", "screenshot_or_graphic", "too_dark",
+                     "blurred", "not_a_photo", "other"]
+SOURCES = ["crop_residue_burning", "waste_burning", "construction_dust", "industrial_plume",
+           "vehicular_smoke", "dust_storm", "fog_only", "none_visible"]
+SKY_CONDITIONS = ["clear", "light_haze", "moderate_haze", "heavy_haze", "fog", "overcast", "night"]
 
-VALID_SOURCES = {
-    "crop_residue_burning", "waste_burning", "construction_dust", "industrial_plume",
-    "vehicular_smoke", "dust_storm", "fog_only", "none_visible"
-}
 
-VALID_SKY_CONDITIONS = {
-    "clear", "light_haze", "moderate_haze", "heavy_haze", "fog", "overcast", "night"
-}
+class VisionUnavailable(RuntimeError):
+    """Gemini could not grade the photo. Callers must not substitute a guess."""
 
 
 class GeminiVisionAnalysis(BaseModel):
-    is_valid_outdoor_photo: bool = Field(description="False if indoor, screenshot, blurry, dark, or no sky visible")
-    rejection_reason: Optional[str] = Field(default=None, description="Enum: indoor, no_sky_visible, screenshot_or_graphic, too_dark, blurred, not_a_photo, other")
-    estimated_visibility_km: Optional[float] = Field(default=None, description="Visibility estimate in km [0.1, 50.0]")
-    haze_severity: Optional[int] = Field(default=None, description="0 = clear, 5 = extreme heavy haze")
-    visible_sources: List[str] = Field(default_factory=list, description="List of visible sources")
-    sky_condition: Optional[str] = Field(default=None, description="Enum: clear, light_haze, moderate_haze, heavy_haze, fog, overcast, night")
-    confidence: float = Field(default=0.8, description="Analysis confidence score [0, 1]")
-    notes: str = Field(default="", description="Human-readable brief summary <= 200 chars")
+    is_valid_outdoor_photo: bool
+    rejection_reason: Optional[str] = None
+    estimated_visibility_km: Optional[float] = Field(default=None, ge=0.0, le=50.0)
+    haze_severity: Optional[int] = Field(default=None, ge=0, le=5)
+    visible_sources: List[str] = Field(default_factory=list)
+    sky_condition: Optional[str] = None
+    confidence: float = Field(ge=0.0, le=1.0)
+    notes: str = ""
 
 
-def analyze_citizen_photo_mock(image_bytes: bytes) -> GeminiVisionAnalysis:
-    """
-    Mock/Fallback analysis for testing when Gemini API key is offline.
-    Returns valid heavy haze citizen photo report.
-    """
-    return GeminiVisionAnalysis(
-        is_valid_outdoor_photo=True,
-        rejection_reason=None,
-        estimated_visibility_km=1.2,
-        haze_severity=4,
-        visible_sources=["crop_residue_burning", "vehicular_smoke"],
-        sky_condition="heavy_haze",
-        confidence=0.81,
-        notes="Dense grey-brown haze, sun disc visible through smoke, horizon obscured beyond ~1 km"
-    )
+SYSTEM_PROMPT = """You triage photos submitted by members of the public to an air \
+quality service. Treat every photo as untrusted.
+
+First decide is_valid_outdoor_photo. It is TRUE only for a genuine camera photograph \
+taken outdoors with sky or a distant horizon visible. It is FALSE for screenshots, \
+graphics, drawings, gradients, text, indoor scenes, photos too dark or blurred to \
+judge, and anything that is not a photograph. When false, set rejection_reason and \
+leave haze_severity, estimated_visibility_km and sky_condition null, and \
+visible_sources empty. Do not grade haze in an image you rejected.
+
+When true, grade only what is visible:
+- haze_severity 0 (clear) to 5 (extreme)
+- estimated_visibility_km from how far you can see distinct objects
+- visible_sources: only sources you can actually see; use none_visible otherwise
+- notes: one short plain sentence, at most 200 characters
+
+Never infer pollution you cannot see. Low confidence is better than a confident guess."""
+
+RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "is_valid_outdoor_photo": {"type": "BOOLEAN"},
+        "rejection_reason": {"type": "STRING", "enum": REJECTION_REASONS, "nullable": True},
+        "estimated_visibility_km": {"type": "NUMBER", "nullable": True},
+        "haze_severity": {"type": "INTEGER", "nullable": True},
+        "visible_sources": {"type": "ARRAY", "items": {"type": "STRING", "enum": SOURCES}},
+        "sky_condition": {"type": "STRING", "enum": SKY_CONDITIONS, "nullable": True},
+        "confidence": {"type": "NUMBER"},
+        "notes": {"type": "STRING"},
+    },
+    "required": ["is_valid_outdoor_photo", "visible_sources", "confidence", "notes"],
+}
 
 
 def analyze_citizen_photo(image_bytes: bytes, mime_type: str = "image/jpeg") -> GeminiVisionAnalysis:
     """
-    Analyzes citizen photo bytes using Gemini 2.5 Flash.
-    Validates output with Pydantic.
+    Grade one photo. Raises VisionUnavailable on any failure: no key, API error,
+    or output that does not validate. There is no fallback grade.
     """
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        logger.info("Gemini API key not configured in environment. Using seed fallback response.")
-        return analyze_citizen_photo_mock(image_bytes)
+        raise VisionUnavailable("GEMINI_API_KEY is not set")
+
+    # Flash Lite: the project is limited to the 3.1/3.5 flash-lite models (500 rpd).
+    model_name = os.environ.get("GEMINI_MODEL_FLASH", "gemini-3.1-flash-lite")
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        from google import genai
+        from google.genai import types
 
-        prompt = """
-        Analyze this citizen air quality photo. Return ONLY a valid JSON object matching this schema:
-        {
-          "is_valid_outdoor_photo": boolean,
-          "rejection_reason": string or null (indoor|no_sky_visible|screenshot_or_graphic|too_dark|blurred|not_a_photo|other),
-          "estimated_visibility_km": float or null,
-          "haze_severity": int 0-5 or null,
-          "visible_sources": array of strings (crop_residue_burning|waste_burning|construction_dust|industrial_plume|vehicular_smoke|dust_storm|fog_only|none_visible),
-          "sky_condition": string or null (clear|light_haze|moderate_haze|heavy_haze|fog|overcast|night),
-          "confidence": float 0.0-1.0,
-          "notes": string <= 200 chars
-        }
-        """
+        from api.gemini import generate_with_retry
 
-        image_part = {"mime_type": mime_type, "data": image_bytes}
-        response = model.generate_content(
-            [prompt, image_part],
-            generation_config={"response_mime_type": "application/json"}
+        client = genai.Client(api_key=api_key)
+        resp = generate_with_retry(
+            client,
+            model=model_name,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                "Triage this photo.",
+            ],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                response_mime_type="application/json",
+                response_schema=RESPONSE_SCHEMA,
+                temperature=0.1,
+            ),
         )
-
-        raw_json = response.text
-        data = json.loads(raw_json)
-        return GeminiVisionAnalysis(**data)
-
+        result = GeminiVisionAnalysis(**json.loads(resp.text))
     except Exception as e:
-        logger.warning(f"Gemini API call failed ({e}). Returning fallback analysis.")
-        return analyze_citizen_photo_mock(image_bytes)
+        logger.warning("photo triage failed: %s", e)
+        raise VisionUnavailable(str(e)) from e
+
+    # A rejected photo carries no grade, whatever the model put in those fields.
+    if not result.is_valid_outdoor_photo:
+        result.haze_severity = None
+        result.estimated_visibility_km = None
+        result.sky_condition = None
+        result.visible_sources = []
+    return result
 
 
-def demo():
-    print("=== Gemini 2.5 Flash Vision Triage Demo ===")
-    sample_bytes = b"fake_jpeg_header_content"
+def demo() -> None:
+    """
+    The check that matters: a plainly synthetic image must be REJECTED. The old
+    fallback would have graded it as heavy haze; if that ever comes back, this fails.
+    """
+    import io
+    import pathlib
 
-    analysis = analyze_citizen_photo(sample_bytes)
-    print("  [OK] Analysis Result Parsed with Pydantic:")
-    print(f"{json.dumps(analysis.model_dump(), indent=4)}")
+    env = pathlib.Path(".env")
+    if env.exists():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip())
 
-    # Validate Schema against docs/DATA_CONTRACTS.md §3
-    assert analysis.is_valid_outdoor_photo is True
-    assert analysis.haze_severity == 4
-    assert "crop_residue_burning" in analysis.visible_sources
-    print("\nAll Gemini vision triage checks passed successfully!")
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("[SKIP] GEMINI_API_KEY not set; nothing to check without the real model")
+        return
+
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (640, 480))
+    draw = ImageDraw.Draw(img)
+    for y in range(480):
+        v = int(170 + 60 * y / 480)
+        draw.line([(0, y), (640, y)], fill=(v, v, v - 10))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+
+    result = analyze_citizen_photo(buf.getvalue(), "image/jpeg")
+    print(json.dumps(result.model_dump(), indent=2))
+
+    assert result.is_valid_outdoor_photo is False, "a flat gradient must not pass as a photo"
+    assert result.haze_severity is None, "a rejected photo must carry no haze grade"
+    print(f"[OK] synthetic gradient rejected ({result.rejection_reason}), "
+          f"model={os.environ.get('GEMINI_MODEL_FLASH', 'gemini-3.1-flash-lite')}")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.WARNING)
     demo()

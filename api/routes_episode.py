@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
@@ -225,24 +226,32 @@ def get_map(
     }
 
 
+@lru_cache(maxsize=256)
+def _speech(text: str, lang: str) -> Optional[str]:
+    """Base64 MP3 for one sentence. Cached: the advisory for a past hour never changes."""
+    from api.gemini import advisory as adv
+    return adv._synthesize_speech(text, adv.TTS_LANGUAGE_CODES.get(lang, "en-IN"))
+
+
 @router.get("/{tenant}/advisory", summary="Public advisory in an Indian language")
 def get_advisory(
     tenant: str,
     ts: str = Query(...),
-    lang: str = Query("hi", description="ISO code: hi, pa, bn, mr, ta, te, kn, gu, or, en"),
+    lang: str = Query("hi", description="ISO code: en, hi, pa, bn, mr, ta, te, kn, ml, gu"),
+    audio: bool = Query(False, description="Also return the sentence spoken, as base64 MP3"),
 ) -> Dict[str, Any]:
     """
     The citizen-facing half. Reuses the cached brief's `public_advisory` so the
     official and the resident are told the same thing about the same hour.
+
+    `audio` exists for people who will not, or cannot, read a screen. It is spoken
+    in the language actually returned: if translation failed and we fell back to
+    English, the audio is English too, never a Hindi voice reading English.
     """
     ep = get_episode(tenant, ts, explain=True)
     brief = ep.get("brief")
     if not brief:
         raise HTTPException(503, f"no brief available: {ep.get('brief_error')}")
-
-    text = brief["public_advisory"]
-    if lang == "en":
-        return {"lang": "en", "text": text, "translated": False}
 
     import os
     from api.gemini import advisory as adv
@@ -250,19 +259,26 @@ def get_advisory(
     if lang not in adv.SUPPORTED_LANGUAGES:
         raise HTTPException(400, f"unsupported language {lang!r}; "
                                  f"supported: {sorted(adv.SUPPORTED_LANGUAGES)}")
-    try:
-        translated = adv._translate_text(text, lang, os.environ["GCP_PROJECT_ID"])
-        # Report the truth: if the mock fired, this is English wearing a label.
-        really_translated = not adv.is_mock_translation(translated)
-        return {
-            "lang": lang if really_translated else "en",
-            "language_name": adv.SUPPORTED_LANGUAGES[lang],
-            "text": translated,
-            "source_text": text,
-            "translated": really_translated,
-        }
-    except Exception as e:
-        # Fall back to English rather than to an untranslated string labelled as
-        # translated — a resident acting on the wrong language is a real failure.
-        logger.warning("translation to %s failed: %s", lang, e)
-        return {"lang": "en", "text": text, "translated": False, "error": str(e)}
+
+    text = brief["public_advisory"]
+    out: Dict[str, Any] = {"lang": "en", "text": text, "translated": False}
+
+    if lang != "en":
+        try:
+            translated = adv._translate_text(text, lang, os.environ["GCP_PROJECT_ID"])
+            # Report the truth: if the mock fired, this is English wearing a label,
+            # so return the plain English rather than the tagged mock string.
+            if not adv.is_mock_translation(translated):
+                out = {"lang": lang, "language_name": adv.SUPPORTED_LANGUAGES[lang],
+                       "text": translated, "source_text": text, "translated": True}
+        except Exception as e:
+            # Fall back to English rather than to an untranslated string labelled as
+            # translated. A resident acting on the wrong language is a real failure.
+            logger.warning("translation to %s failed: %s", lang, e)
+            out["error"] = str(e)
+
+    if audio:
+        out["audio_base64"] = _speech(out["text"], out["lang"])
+        out["audio_content_type"] = "audio/mpeg"
+
+    return out

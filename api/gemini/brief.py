@@ -166,8 +166,13 @@ def generate(evidence: Dict[str, Any], model: Optional[str] = None) -> Dict[str,
     payload = json.dumps(evidence, indent=2, default=str)
     last_problems: List[str] = []
 
+    from api.gemini import generate_with_retry
+
     for attempt in (1, 2):
-        resp = client.models.generate_content(
+        # Transient 503s are retried inside the helper; this loop is only for
+        # briefs that come back but fail R5 verification.
+        resp = generate_with_retry(
+            client,
             model=model_name,
             contents=payload,
             config=types.GenerateContentConfig(

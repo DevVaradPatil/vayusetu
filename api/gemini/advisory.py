@@ -161,22 +161,15 @@ def is_mock_translation(text: str) -> bool:
     return text.startswith("[") and "]" in text[:24]
 
 
-def _synthesize_speech_mock(text: str, lang_bcp47: str) -> Optional[str]:
-    """
-    Returns None in mock mode — Cloud TTS not available without credentials.
-    """
-    logger.debug(f"TTS mock: would synthesize '{text[:40]}...' in {lang_bcp47}")
-    return None
-
-
 def _synthesize_speech(text: str, lang_bcp47: str) -> Optional[str]:
     """
     Synthesizes speech using Cloud Text-to-Speech API.
     Returns base64-encoded MP3 bytes, or None on failure.
-    """
-    if not os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-        return _synthesize_speech_mock(text, lang_bcp47)
 
+    Not gated on GOOGLE_APPLICATION_CREDENTIALS, for the same reason as
+    _translate_text: ADC never sets it, so that gate meant spoken advisories
+    silently never ran on any machine where they would have worked.
+    """
     try:
         import base64
         from google.cloud import texttospeech
@@ -247,7 +240,9 @@ def generate_advisory(
         source_text=source_text,
         audio_base64=audio_b64,
         cached=False,
-        translation_model="cloud_translation_v2" if os.getenv("GOOGLE_APPLICATION_CREDENTIALS") else "mock",
+        translation_model=("none" if lang == "en"
+                           else "mock" if is_mock_translation(translated_text)
+                           else "cloud_translation_v2"),
     )
 
     # Cache it

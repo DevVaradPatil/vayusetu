@@ -48,7 +48,7 @@ from ingestion.stations import generate_seed_stations
 from ingestion.fires import generate_seed_fires
 from ingestion.static_layers import generate_grid_cells_for_tenant
 from ml.common import compute_idw_baseline, compute_confidence, is_hotspot, get_cpcb_aqi_band
-from api.gemini.vision import analyze_citizen_photo
+from api.gemini.vision import analyze_citizen_photo, VisionUnavailable
 from api.validation import validate_citizen_upload, apply_fusion_rule
 from api.gemini.attribution import assemble_evidence, generate_attribution_brief
 from api.gemini.advisory import generate_advisory, SUPPORTED_LANGUAGES
@@ -312,8 +312,13 @@ async def upload_citizen_report(
             "gemini_analysis": None
         }
 
-    # Gemini 2.5 Flash Vision Analysis
-    analysis = analyze_citizen_photo(content, file.content_type or "image/jpeg")
+    # No fabricated triage on failure. This used to fall back to a fixed "heavy
+    # haze" grade for every photo; a resident is better told "try again later"
+    # than told their clear sky is smoke.
+    try:
+        analysis = analyze_citizen_photo(content, file.content_type or "image/jpeg")
+    except VisionUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"Photo check is unavailable right now: {e}")
 
     return {
         "report_id": f"rep_{int(now_utc.timestamp())}",
