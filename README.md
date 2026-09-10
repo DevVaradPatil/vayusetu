@@ -21,6 +21,8 @@ VayuSetu answers the three questions that follow the number:
 
 It then says it again, in the resident's own language.
 
+The site has two views of the same hour. **For officials:** a map of monitors, fires and wind, the measured evidence, an AI explanation checked against it, and who should act. **For residents:** how bad the air is, what it means for health, what to do and why, entirely in one of ten Indian languages, with the advice read aloud and a way to send a photo of the haze. Both are written for someone who has never seen an air quality map.
+
 ### A real episode, generated end to end
 
 `GET /api/v1/ncr/episode?ts=2025-11-11T20:00:00Z` — 01:30 IST, the peak of the
@@ -123,8 +125,11 @@ trapping* on its own. The conclusion follows the evidence.
 | **Gemini 3.5 Flash Lite** | Reasons over fused multi-source evidence into an attribution brief with role-addressed actions — the reasoning step, not a wrapper |
 | **BigQuery** | Every observation, join and aggregation; the evidence assembly is SQL |
 | **Earth Engine** | MAIAC 1 km AOD, Sentinel-5P, WorldCover land use, GHSL population, SRTM elevation |
-| **Cloud Translation** | Ten-language advisories, so the finding reaches people who will never open a dashboard |
-| **Cloud Run / Firestore / Maps** | Serverless service, live state, mapping |
+| **Gemini 3.1 Flash Lite** | Triage of residents' haze photos: rejects screenshots, graphics and indoor shots, grades haze only in genuine outdoor photos, and never produces a pollution reading |
+| **Cloud Translation** | The whole resident page in ten Indian languages, in one batched request, not only the advice sentence |
+| **Cloud Text-to-Speech** | The advice read aloud in all ten languages, for people who will not or cannot read a screen |
+| **Google Maps JavaScript API** | The interactive map: real borders and place names, with the wind fan drawn as geodesic geometry |
+| **Cloud Run / Firestore** | Serverless service and live state |
 
 Vertex AI training and serving are wired but currently carry no published model — see
 the falsification table above. We would rather ship an empty registry than a model the
@@ -162,7 +167,14 @@ With `.env` populated (see [`docs/RUNBOOK.md`](docs/RUNBOOK.md)):
 ```bash
 python -m api.evidence         # assemble measured evidence for the hero episode
 python -m api.gemini.brief     # generate a brief and verify it against R5
-uvicorn api.main:app --reload  # the service
+python -m uvicorn api.main:app --port 8080 --reload   # the API, from the repository root
+```
+
+Then the website, from `web/` (it needs `VITE_GOOGLE_MAPS_API_KEY` in `web/.env.local`):
+
+```bash
+npm install
+npm run dev                    # http://localhost:3000
 ```
 
 No API keys? The model harness runs standalone on placeholder data:
@@ -210,10 +222,13 @@ the console; the live one is greyed when stale.
 **Winter cloud and fog mask the satellite input.** 30–50% missing MAIAC AOD in Delhi
 winter is normal; the gap is disclosed in `missing_fields`, not forward-filled.
 
-**Ten languages via machine translation.** The API supports ten; the console exposes
-eight. Translations are Cloud Translation output, not reviewed by native speakers, and
-the endpoint reports `translated: false` rather than labelling English as Hindi when
-the service is unavailable.
+**Ten languages via machine translation.** Every resident-facing word is Cloud
+Translation output, not reviewed by native speakers. When the service is unavailable
+the page falls back to English and says so, rather than labelling English as Hindi.
+
+**Photo triage is verified only on rejection.** Against the real model, synthetic
+gradients and fake screenshots are rejected with no haze grade. Grading of genuine haze
+photographs has not yet been tested against a labelled set.
 
 **Citizen photos are corroborating evidence only.** They raise a cell's confidence
 score. They never set a PM2.5 value and never trigger an alert on their own —

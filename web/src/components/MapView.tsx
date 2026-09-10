@@ -1,23 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapTrifold } from '@phosphor-icons/react';
-import { bandColor, MAPS_KEY, type Evidence, type MapData } from '../lib/data';
+import { band, MAPS_KEY, type Evidence, type MapData } from '../lib/data';
+import { inkOn } from '../lib/plain';
+import { token } from '../lib/theme';
 
 /**
  * The real map.
  *
- * Everything drawn here is observed: stations where they physically stand, fire
- * detections where NASA saw them, and the upwind sector as true geodesic geometry
- * rather than a triangle drawn in screen space. That distinction matters, because
- * the cone is the claim the whole brief rests on: these fires, and not those, could
- * have reached this station.
+ * Everything drawn here is observed: monitors where they physically stand, fire
+ * detections where NASA saw them, and the wind fan as true geodesic geometry
+ * rather than a triangle drawn in screen space. That matters, because the fan is
+ * the claim the explanation rests on: these fires, and not those, could have
+ * reached this monitor.
  *
- * The Maps JS API is loaded directly rather than through a React wrapper. Every
- * overlay below is a raw google.maps object anyway, so a wrapper would only have
- * been script loading plus a container div, and the one we tried never attached a
- * map instance. Thirty lines here replace the dependency and the failure mode.
+ * The Maps JS API is loaded directly. Every overlay is a raw google.maps object,
+ * so a React wrapper would only add script loading and a container div.
  *
- * Overlays are vector Circles and Polygons, not markers. 65 stations plus 464 fires
- * as DOM markers would repaint on every pan; as vector shapes the map draws them.
+ * Overlays are vector Circles and Polygons, not markers: 65 monitors plus 464
+ * fires as DOM markers would repaint on every pan. Their colours come from the
+ * theme tokens and are redrawn when the theme changes, along with the basemap.
  */
 
 const DARK_STYLE: google.maps.MapTypeStyle[] = [
@@ -38,12 +39,32 @@ const DARK_STYLE: google.maps.MapTypeStyle[] = [
   { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#191a1f' }] },
 ];
 
+// Muted, so the AQI colours and the fires are what the eye lands on.
+const LIGHT_STYLE: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#f1f2f4' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#5f6368' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#f5f5f5' }] },
+  { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#c4c7cc' }] },
+  { featureType: 'administrative.country', elementType: 'geometry.stroke', stylers: [{ color: '#8a9096' }] },
+  { featureType: 'administrative.province', elementType: 'geometry.stroke', stylers: [{ color: '#a4a9af' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#3c4043' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+  { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#e3e5e8' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9dcef' }] },
+  { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#eceef1' }] },
+];
+
 export type Layers = { stations: boolean; fires: boolean; sector: boolean };
 
 interface Props {
   data: MapData | null;
   ev: Evidence | null;
   layers: Layers;
+  theme: 'light' | 'dark';
 }
 
 /**
@@ -51,9 +72,8 @@ interface Props {
  *
  * The script's onload is NOT that moment: under `loading=async` the bootstrap
  * returns before the API has attached its constructors, so resolving there gives
- * "google.maps.Map is not a constructor", and importLibrary is not attached yet
- * either. The `callback` parameter is the one signal Google fires only once the
- * API is genuinely usable.
+ * "google.maps.Map is not a constructor". The `callback` parameter is the one
+ * signal Google fires only once the API is genuinely usable.
  */
 let loader: Promise<void> | null = null;
 function loadMaps(key: string): Promise<void> {
@@ -72,14 +92,22 @@ function loadMaps(key: string): Promise<void> {
   return loader;
 }
 
-/** Radius in metres for a station bubble. Bigger reading, bigger footprint. */
+/** Radius in metres for a monitor bubble. Bigger reading, bigger footprint. */
 const stationRadius = (pm: number) => 1400 + Math.min(pm, 800) * 5.5;
 
-export default function MapView({ data, ev, layers }: Props) {
+/** Monitor names come from an external feed and are put into HTML: escape them. */
+const esc = (s: string) =>
+  s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+const styleFor = (theme: 'light' | 'dark') => (theme === 'dark' ? DARK_STYLE : LIGHT_STYLE);
+
+export default function MapView({ data, ev, layers, theme }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
-  const shapes = useRef<any[]>([]);
+  const shapes = useRef<{ setMap: (m: google.maps.Map | null) => void }[]>([]);
   const info = useRef<google.maps.InfoWindow | null>(null);
+  const themeNow = useRef(theme);
+  themeNow.current = theme;
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
 
@@ -89,31 +117,31 @@ export default function MapView({ data, ev, layers }: Props) {
     let cancelled = false;
 
     const create = () => {
-      // Only once the container actually has pixels. A map constructed in a
-      // zero-sized element keeps an invalid viewport and never requests a single
-      // tile: it renders as a blank beige panel until something resizes it. This
-      // panel is laid out by grid, so its height arrives after mount.
+      // Only once the container has pixels. A map constructed in a zero-sized
+      // element keeps an invalid viewport; this panel's height arrives after mount.
       if (cancelled || map.current || !el.clientWidth || !el.clientHeight) return;
       loadMaps(MAPS_KEY)
         .then(() => {
           if (cancelled || map.current || !el.clientWidth) return;
-          map.current = new google.maps.Map(el, {
+          const m = new google.maps.Map(el, {
             center: { lat: 28.65, lng: 77.1 },
             zoom: 9,
             disableDefaultUI: true,
             zoomControl: true,
             clickableIcons: false,
             gestureHandling: 'greedy',
-            styles: DARK_STYLE,
+            styles: styleFor(themeNow.current),
           });
           info.current = new google.maps.InfoWindow();
+          m.addListener('click', () => info.current?.close());
+          map.current = m;
           setReady(true);
         })
         .catch(e => !cancelled && setFailed(String(e?.message ?? e)));
     };
 
-    // Also covers the responsive breakpoint: when the grid stacks, the panel
-    // changes size without the window doing so, and the map needs telling.
+    // Also covers the view being hidden and shown again, and the layout stacking
+    // at a breakpoint: the panel changes size without the window doing so.
     const ro = new ResizeObserver(() => {
       create();
       if (map.current) google.maps.event.trigger(map.current, 'resize');
@@ -124,8 +152,11 @@ export default function MapView({ data, ev, layers }: Props) {
     return () => { cancelled = true; ro.disconnect(); };
   }, []);
 
-  // Draw the hour. Overlays are rebuilt wholesale because a new hour changes every
-  // one of them; there is nothing worth diffing.
+  useEffect(() => {
+    if (ready && map.current) map.current.setOptions({ styles: styleFor(theme) });
+  }, [ready, theme]);
+
+  // Draw the hour. Rebuilt wholesale: a new hour or theme changes every overlay.
   useEffect(() => {
     const m = map.current;
     if (!ready || !m) return;
@@ -133,6 +164,10 @@ export default function MapView({ data, ev, layers }: Props) {
     shapes.current.forEach(s => s.setMap(null));
     shapes.current = [];
     info.current?.close();
+
+    const cone = token('--cone') || '#0b57d0';
+    const fire = token('--fire') || '#ea580c';
+    const ring = token('--worst-ring') || '#1a1c21';
 
     const add = <T extends { setMap: (m: google.maps.Map | null) => void }>(s: T) => {
       shapes.current.push(s);
@@ -144,7 +179,7 @@ export default function MapView({ data, ev, layers }: Props) {
       info.current!.open({ map: m });
     };
 
-    // --- The upwind sector, in real geodesic geometry ------------------------
+    // --- The wind fan, in real geodesic geometry -----------------------------
     if (layers.sector && ev?.wind.from_bearing_deg != null) {
       const origin = new google.maps.LatLng(ev.worst_station.lat, ev.worst_station.lon);
       const bearing = ev.wind.from_bearing_deg;
@@ -157,17 +192,17 @@ export default function MapView({ data, ev, layers }: Props) {
 
       add(new google.maps.Polygon({
         paths: arc, map: m,
-        strokeColor: '#a8c7fa', strokeOpacity: 0.55, strokeWeight: 1.5,
-        fillColor: '#a8c7fa', fillOpacity: 0.1,
+        strokeColor: cone, strokeOpacity: 0.6, strokeWeight: 1.5,
+        fillColor: cone, fillOpacity: 0.1,
         clickable: false, zIndex: 1,
       }));
 
       add(new google.maps.Polyline({
         path: [origin, offset(origin, metres, bearing)], map: m,
-        strokeColor: '#a8c7fa', strokeOpacity: 0.5, strokeWeight: 1,
+        strokeColor: cone, strokeOpacity: 0.55, strokeWeight: 1,
         clickable: false, zIndex: 2,
         icons: [{
-          icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.6, strokeColor: '#a8c7fa' },
+          icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 2.6, strokeColor: cone },
           offset: '0%', repeat: '120px',
         }],
       }));
@@ -179,48 +214,46 @@ export default function MapView({ data, ev, layers }: Props) {
         const c = add(new google.maps.Circle({
           map: m, center: { lat: f.lat, lng: f.lon },
           radius: 700 + Math.min(f.frp, 60) * 22,
-          strokeColor: '#fb923c', strokeOpacity: 0.5, strokeWeight: 1,
-          fillColor: '#fb923c', fillOpacity: 0.35, zIndex: 3,
+          strokeColor: fire, strokeOpacity: 0.6, strokeWeight: 1,
+          fillColor: fire, fillOpacity: 0.4, zIndex: 3,
         }));
         c.addListener('click', () => openInfo({ lat: f.lat, lng: f.lon }, `
-          <div style="font:400 13px Roboto,sans-serif;color:#e4e2e6;padding:12px 14px;min-width:150px">
-            <div style="color:#fb923c;font-weight:500;margin-bottom:4px">Fire detection</div>
-            <div style="color:#c5c6d0">Radiative power
-              <span style="font-family:'Roboto Mono',monospace">${f.frp.toFixed(1)} MW</span></div>
-            <div style="color:#8e909a;font-size:12px;margin-top:4px">NASA FIRMS (VIIRS)</div>
+          <div class="iw">
+            <div class="iw-kicker">Fire spotted by satellite</div>
+            <div class="iw-row"><span class="iw-value num">${f.frp.toFixed(1)}</span>
+              <span class="iw-unit">MW of heat</span></div>
+            <div class="iw-sub">NASA FIRMS, last 48 hours</div>
           </div>`));
       }
     }
 
-    // --- Stations ------------------------------------------------------------
+    // --- Monitors ------------------------------------------------------------
     if (layers.stations) {
       for (const s of data?.stations ?? []) {
-        const worst = ev && s.name === ev.worst_station.name;
+        const worst = !!ev && s.name === ev.worst_station.name;
+        const b = band(s.pm25);
         const c = add(new google.maps.Circle({
           map: m, center: { lat: s.lat, lng: s.lon },
           radius: stationRadius(s.pm25),
-          strokeColor: worst ? '#ffffff' : bandColor(s.pm25),
-          strokeOpacity: worst ? 0.95 : 0.7,
+          strokeColor: worst ? ring : b.color,
+          strokeOpacity: worst ? 0.95 : 0.75,
           strokeWeight: worst ? 2.5 : 1,
-          fillColor: bandColor(s.pm25), fillOpacity: 0.5,
+          fillColor: b.color, fillOpacity: 0.55,
           zIndex: worst ? 6 : 5,
         }));
         c.addListener('click', () => openInfo({ lat: s.lat, lng: s.lon }, `
-          <div style="font:400 13px Roboto,sans-serif;color:#e4e2e6;padding:12px 14px;max-width:230px">
-            <div style="font-weight:500;margin-bottom:6px;line-height:1.35">${s.name}</div>
-            <div style="display:flex;align-items:baseline;gap:6px">
-              <span style="font-family:'Roboto Mono',monospace;font-size:22px;color:${bandColor(s.pm25)}">
-                ${s.pm25.toFixed(1)}</span>
-              <span style="color:#8e909a;font-size:12px">ug/m3 PM2.5</span>
-            </div>
-            <div style="color:${bandColor(s.pm25)};font-size:12px;margin-top:2px">${s.aqi_band}</div>
+          <div class="iw">
+            <div class="iw-kicker">${worst ? 'Worst reading in the city' : 'Air monitor'}</div>
+            <div class="iw-title">${esc(s.name)}</div>
+            <div class="iw-row"><span class="iw-value num">${s.pm25.toFixed(0)}</span>
+              <span class="iw-unit">µg/m³ PM2.5</span></div>
+            <span class="iw-pill" style="background:${b.color};color:${inkOn(b.color)}">${b.name}</span>
           </div>`));
       }
     }
-  }, [ready, data, ev, layers]);
+  }, [ready, data, ev, layers, theme]);
 
-  // Frame the episode when the hour changes: the analysis moved, so the view
-  // follows it. Motivated motion, not decoration.
+  // Frame the episode when the hour changes: the analysis moved, so the view follows.
   useEffect(() => {
     const m = map.current;
     if (!ready || !m || !ev) return;
@@ -234,34 +267,20 @@ export default function MapView({ data, ev, layers }: Props) {
         bounds.extend(google.maps.geometry.spherical.computeOffset(
           origin, metres, ev.wind.from_bearing_deg! + a)));
     }
-    m.fitBounds(bounds, { top: 56, right: 56, bottom: 56, left: 56 });
+    m.fitBounds(bounds, { top: 64, right: 56, bottom: 64, left: 56 });
   }, [ready, ev?.ts]);
 
   if (!MAPS_KEY || failed) {
     return (
-      <div style={fallback}>
+      <div className="map-fallback">
         <MapTrifold size={32} color="var(--on-surface-dim)" />
-        <div style={{ marginTop: 10, fontWeight: 500 }}>
-          {failed ? 'Map could not load' : 'Map key not configured'}
-        </div>
-        <div style={{ color: 'var(--on-surface-variant)', marginTop: 4, fontSize: 13, maxWidth: 320 }}>
+        <strong>{failed ? 'The map could not load' : 'Map key not configured'}</strong>
+        <span className="note">
           {failed ?? 'Set VITE_GOOGLE_MAPS_API_KEY in web/.env.local, then restart the dev server.'}
-        </div>
+        </span>
       </div>
     );
   }
 
-  return <div ref={host} style={{ position: 'absolute', inset: 0 }} />;
+  return <div ref={host} className="map-host" />;
 }
-
-const fallback: React.CSSProperties = {
-  position: 'absolute',
-  inset: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  textAlign: 'center',
-  padding: 24,
-  background: 'var(--surface-container-low)',
-};

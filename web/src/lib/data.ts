@@ -1,19 +1,19 @@
 /**
- * Shared types, the CPCB scale, and the API client.
+ * Shared types, the CPCB scale, dates, and the API client.
  *
  * The AQI scale lives here alone. It is a public-health standard people already
- * read, so it must be identical on the map, in the stat strip and on the
- * timeline: one definition, three consumers.
+ * read, so it must be identical on the map, in the summary, on the timeline and
+ * in the resident view: one definition, every consumer.
  */
 
 export const API = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:8080';
 export const MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ?? '';
 export const TENANT = 'ncr';
 
-/** The frozen hero episode: the peak of the real November 2025 Delhi smog event. */
+/** The frozen hero episode: 01:30 IST on 12 Nov 2025, the peak of a real Delhi smog event. */
 export const HERO_TS = '2025-11-11T20:00:00Z';
 
-/** CPCB National AQI bands for PM2.5, with the token each band paints with. */
+/** CPCB National AQI bands for PM2.5. */
 export const BANDS: { max: number; name: string; color: string }[] = [
   { max: 30,       name: 'Good',         color: '#22c55e' },
   { max: 60,       name: 'Satisfactory', color: '#84cc16' },
@@ -109,15 +109,47 @@ export interface Episode {
   cached: boolean;
 }
 
+/** The resident page's words, already translated by /residents. */
+export interface Residents {
+  lang: string;
+  translated: boolean;
+  ui: Record<string, string>;
+  health: Record<string, string>;
+  tips: Record<string, string[]>;
+  why: string[];
+  advisory: string | null;
+  reading: { city_pm25: number; aqi_band: string; n_stations: number; ts: string };
+}
+
+export interface PhotoAnalysis {
+  is_valid_outdoor_photo: boolean;
+  rejection_reason: string | null;
+  estimated_visibility_km: number | null;
+  haze_severity: number | null;
+  visible_sources: string[];
+  sky_condition: string | null;
+  confidence: number;
+  notes: string;
+}
+
+export interface ReportResult {
+  is_valid: boolean;
+  rejection_reason?: string | null;
+  gemini_analysis?: PhotoAnalysis | null;
+}
+
+/** The ten languages the API translates and speaks, each written in its own script. */
 export const LANGS: { code: string; label: string }[] = [
   { code: 'en', label: 'English' },
   { code: 'hi', label: 'हिन्दी' },
-  { code: 'pa', label: 'ਪੰਜਾਬੀ' },
   { code: 'bn', label: 'বাংলা' },
   { code: 'mr', label: 'मराठी' },
-  { code: 'ta', label: 'தமிழ்' },
   { code: 'te', label: 'తెలుగు' },
+  { code: 'ta', label: 'தமிழ்' },
   { code: 'gu', label: 'ગુજરાતી' },
+  { code: 'kn', label: 'ಕನ್ನಡ' },
+  { code: 'ml', label: 'മലയാളം' },
+  { code: 'pa', label: 'ਪੰਜਾਬੀ' },
 ];
 
 const get = async <T>(path: string): Promise<T> => {
@@ -126,30 +158,55 @@ const get = async <T>(path: string): Promise<T> => {
   return r.json();
 };
 
+const q = (ts: string) => `ts=${encodeURIComponent(ts)}`;
+
 export const fetchTimeline = () =>
   get<{ series: Day[] }>(`/api/v1/${TENANT}/timeline`).then(d => d.series ?? []);
 
-export const fetchEpisode = (ts: string) =>
-  get<Episode>(`/api/v1/${TENANT}/episode?ts=${encodeURIComponent(ts)}`);
+export const fetchEpisode = (ts: string) => get<Episode>(`/api/v1/${TENANT}/episode?${q(ts)}`);
 
-export const fetchMap = (ts: string) =>
-  get<MapData>(`/api/v1/${TENANT}/map?ts=${encodeURIComponent(ts)}`);
+export const fetchMap = (ts: string) => get<MapData>(`/api/v1/${TENANT}/map?${q(ts)}`);
 
-export const fetchAdvisory = (ts: string, lang: string) =>
-  get<{ text: string; lang: string; translated: boolean }>(
-    `/api/v1/${TENANT}/advisory?ts=${encodeURIComponent(ts)}&lang=${lang}`,
+export const fetchAdvisory = (ts: string, lang: string, audio = false) =>
+  get<{ text: string; lang: string; translated: boolean; audio_base64?: string | null }>(
+    `/api/v1/${TENANT}/advisory?${q(ts)}&lang=${lang}${audio ? '&audio=true' : ''}`,
   );
 
-/** IST is the only clock an Indian official reads. UTC never reaches the screen. */
-export const fmtIST = (iso: string, withTime = true) =>
-  new Intl.DateTimeFormat('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    ...(withTime ? { hour: '2-digit', minute: '2-digit', hour12: false } : {}),
-    timeZone: 'Asia/Kolkata',
-  }).format(new Date(iso)) + (withTime ? ' IST' : '');
+export const fetchResidents = (ts: string, lang: string) =>
+  get<Residents>(`/api/v1/${TENANT}/residents?${q(ts)}&lang=${lang}`);
 
-/** Compass point for a bearing, so "from 338" reads as a direction, not a number. */
+/** Photo report. Returns the status too: a 503 means "try again", not "bad photo". */
+export async function postReport(form: FormData): Promise<{ status: number; body: ReportResult | null }> {
+  const r = await fetch(`${API}/api/v1/${TENANT}/reports`, { method: 'POST', body: form });
+  let body: ReportResult | null = null;
+  try { body = await r.json(); } catch { /* non-JSON error page */ }
+  return { status: r.status, body };
+}
+
+/** "12 November 2025 at 1:30 am", in India time and the reader's language. */
+export const fmtLong = (iso: string, lang = 'en') =>
+  new Intl.DateTimeFormat(`${lang}-IN`, {
+    dateStyle: 'long', timeStyle: 'short', timeZone: 'Asia/Kolkata',
+  }).format(new Date(iso));
+
+/** The calendar date in India for a timestamp, as YYYY-MM-DD. */
+export const istDate = (iso: string) =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(iso));
+
+/**
+ * 01:30 India time on a given Indian date, as a UTC hour. Night hours are when a
+ * collapsed air ceiling traps smoke, so a picked day is shown at 01:30; that is
+ * 20:00 UTC on the previous date.
+ */
+export const tsForIstDay = (isoDate: string) => {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return `${d.toISOString().slice(0, 10)}T20:00:00Z`;
+};
+
+/** Short compass point for a bearing, used where space is tight. */
 export const compass = (deg: number) =>
   ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
    'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'][Math.round(deg / 22.5) % 16];

@@ -4,7 +4,7 @@ A complete technical walkthrough: what the system does, what data it uses, what
 every component computes, and what we measured. Written to be read start to finish
 by someone who has not seen the code.
 
-**Last updated:** 2026-09-09
+**Last updated:** 2026-09-10
 
 ---
 
@@ -52,6 +52,9 @@ That residual was going to be the product.
 | 4 | Satellite AOD explains where interpolation is wrong | Correlated daily IDW error against AOD | **No** — r = +0.04 |
 | 5 | The 72-hour forecaster beats persistence | Per-horizon backtest | **No** — see below |
 | 6 | **Upwind fires + boundary layer explain the episodes** | 26 days of the real stubble season | **Yes** — r = **+0.55**, **−0.42** |
+
+Grouped by UTC day. On the Indian calendar days the website's chart uses, the same data
+gives +0.58 and -0.48.
 
 **The most important measurement was one we nearly got wrong.** Model B initially
 showed **+42% over persistence** at +6h — a headline result. But plain persistence
@@ -305,11 +308,34 @@ wording:
 
 Gemini reclassified the dominant driver on its own, because the evidence changed.
 
-### The other language work
+### Language and speech
 
-`api/gemini/advisory.py` translates the one-sentence public advisory via Cloud
-Translation into **10 languages** (the console exposes 8): Hindi, Punjabi, Bengali,
-Marathi, Tamil, Telugu, Kannada, Malayalam, Gujarati, English.
+`api/residents.py` builds the resident page's text and translates all of it (labels,
+health meanings, tips, the plain-language "why" and the advice) in **one batched Cloud
+Translation request** per language: English, Hindi, Bengali, Marathi, Telugu, Tamil,
+Gujarati, Kannada, Malayalam and Punjabi. If translation fails, the whole page comes back
+in English marked `translated: false`, never a mix.
+
+The "why" sentences are not generated. They are templates filled with measured values
+("smoke from 35 fires spotted by satellites is blowing in from the north") with coarse
+thresholds, so the simplest explanation on the site is the one we can defend line by line.
+
+`/advisory?audio=true` returns the advice spoken by Cloud Text-to-Speech, in the language
+actually returned: if translation fell back to English, so does the voice.
+
+### Photo triage
+
+`api/gemini/vision.py` treats a resident's photo as untrusted. Gemini 3.1 Flash Lite first
+decides whether it is a genuine outdoor photograph, and only then grades haze. A rejected
+photo carries no grade. A photo never sets a PM2.5 value and never triggers an alert on its
+own (rule R4), and the resident page tells people so.
+
+> Two silent failures were removed here. The old triage returned a fixed "heavy haze, crop
+> burning, 0.81" whenever the Gemini call failed, which on a clean deploy was every call,
+> because it imported an end-of-life SDK absent from `requirements.txt`. Spoken advisories
+> carried the same `GOOGLE_APPLICATION_CREDENTIALS` gate that had broken translation, so
+> they never ran. Verified since: synthetic images are rejected by the real model, and
+> audio is produced in all ten languages. Grading of real haze photos is not yet tested.
 
 > A bug worth recording: `_translate_text()` used to gate on
 > `GOOGLE_APPLICATION_CREDENTIALS`, an environment variable that Application Default
@@ -331,7 +357,9 @@ Marathi, Tamil, Telugu, Kannada, Malayalam, Gujarati, English.
 | `GET /api/v1/{tenant}/episode?ts=` | **The core call.** Measured evidence + verified brief |
 | `GET /api/v1/{tenant}/timeline?date_from=&date_to=` | Daily PM2.5 against upwind fires and BLH |
 | `GET /api/v1/{tenant}/map?ts=` | Stations and fires for one hour, for drawing |
-| `GET /api/v1/{tenant}/advisory?ts=&lang=` | The public sentence, translated |
+| `GET /api/v1/{tenant}/advisory?ts=&lang=&audio=` | The public sentence, translated, optionally spoken |
+| `GET /api/v1/{tenant}/residents?ts=&lang=` | Everything the resident view shows, translated in one batch |
+| `POST /api/v1/{tenant}/reports` | A resident's haze photo: upload gates, then Gemini triage |
 | `GET /api/v1/{tenant}/event?ts=` | The episode in the **open interchange format** (§8) |
 
 Two design decisions:
@@ -347,23 +375,50 @@ Those were falsified (§2). The absence is the honest design.
 
 Cold call ≈ 10.7 s (BigQuery + Gemini); cached ≈ instant.
 
+**Inputs that reach SQL are validated at the boundary.** The `{tenant}` path value is
+interpolated into BigQuery dataset names and the timeline's dates into its query, so one
+router-level dependency restricts the tenant to a dataset-safe key and the dates are
+pattern-checked. A backtick tenant or SQL in `date_from` returns 422.
+
 ---
 
-## 7. The console
+## 7. The website
 
-**File: `web/src/App.tsx`.** React + Vite, hand-rolled SVG, no charting library.
+**Files: `web/src/`.** React and Vite, Material 3 tokens (`theme.css`), the Google Maps
+JavaScript API, Phosphor icons and self-hosted Roboto. Written to be understood by someone
+who has never seen an air quality map.
 
-| Panel | What it shows |
+Two views of the same hour, switched at the top and kept mounted, so returning to the map
+does not reload it (each new Google map is a billed load).
+
+**For officials** (`OfficialsView.tsx`)
+
+| Part | What it shows |
 |---|---|
-| **Observed conditions** | SVG map: stations coloured by CPCB band, fires sized by radiative power, the upwind cone, a wind rose, and the worst station ringed with its value |
-| **Stat strip** | City PM2.5, worst station, boundary layer (red when < 200 m, labelled "collapsed"), upwind fire count |
-| **Attribution brief** | Gemini's cause and confidence, the narrative, and the **cited measurements as chips** — so a reader can see exactly which numbers the reasoning rests on |
-| **Recommended actions** | Urgency-ranked, addressed to offices |
-| **Public advisory** | Eight-language selector, live translation |
-| **Daily drivers** | 26 days of PM2.5 bars with a fire-count overlay; **click any day** to re-run the whole analysis for it |
+| **Summary** | The answer first, in plain words ("Air across Delhi NCR was Severe on 12 November 2025 at 1:30 am"), the measured reasons, and what the level means for health |
+| **How to read this page** | A first-visit guide to the circles, the fires and the wind fan, dismissed once |
+| **Map** | Monitors coloured by CPCB level, fires sized by heat, the wind fan in geodesic geometry; tap any monitor or fire for its reading |
+| **Measurements** | City average, worst monitor, air ceiling (flagged when it traps smoke) and fires upwind, each with an (i) explainer |
+| **Why is the air bad?** | Gemini's cause and confidence, the narrative, and the cited measurements written as a person would say them ("Air ceiling: 65 m") |
+| **What should be done** | Actions by office and urgency |
+| **Advice for the public** | Ten languages, and a Listen button |
+| **Four weeks** | Daily PM2.5 bars with the fire count; pick a day, by mouse or keyboard, to re-run everything |
 
-The timeline is the visual argument for the whole product: the tall bars line up with
-the fire spikes and the boundary-layer collapses.
+**For residents** (`ResidentsView.tsx`): the level in large type on its own colour, what it
+means for health, what to do, why, and the photo report, all in the chosen language. The
+photo is shrunk and re-encoded in the browser before upload, which also strips EXIF location
+and device data.
+
+Plain language is a design rule, not a tooltip: "air ceiling" rather than boundary layer,
+"wind fan" rather than upwind sector, with the technical meaning one (i) away. Colours follow
+two locks: blue is the interface, the green-to-red ramp is data only, and band colours appear
+as fills with contrast-checked text. Themes follow the device. Timeline days are Indian
+calendar days, so the day picked and the time shown always agree. The site installs as an
+app (`manifest.webmanifest`, and a service worker that never caches readings) and opens on
+the resident view.
+
+The timeline is still the visual argument for the whole product: the tall bars line up with
+the fire spikes.
 
 > One bug caught while writing this document: the map header drew its cone from a
 > *city-average* wind bearing (322°) while the brief cited the *worst-station* bearing
@@ -451,7 +506,9 @@ python -m uvicorn api.main:app --port 8080 --reload
 cd web && npm run dev
 ```
 
-Open **http://localhost:3000**. `web/.env.local` points it at `http://localhost:8080`.
+Open **http://localhost:3000**. `web/.env.local` points it at `http://localhost:8080` and
+holds `VITE_GOOGLE_MAPS_API_KEY`. The API command runs from the repository root; the
+website runs from `web/`.
 
 **Standalone checks, no browser:**
 
@@ -477,7 +534,10 @@ python -m ml.evaluate_forecast # per-horizon vs persistence and climatology
 | `ml/evaluate.py`, `ml/forecast_real.py` | The falsified models, kept reproducible |
 | `ml/registry.py` | Model card publish/import with the R2 guard |
 | `spec/` | The two open schemas |
-| `web/src/App.tsx` | The whole console |
+| `api/residents.py` | The resident page's words: plain-language why, CPCB health meanings, batched translation |
+| `api/gemini/vision.py` | Photo triage, with no fallback grade |
+| `web/src/components/` | Officials and resident views, map, explanation panel, timeline |
+| `web/src/theme.css` | Material 3 tokens for light and dark, and every layout rule |
 | `TODO.md` | Every finding, with the numbers that killed each hypothesis |
 | `docs/DATA_CONTRACTS.md` | Frozen interfaces; §7a records measured API reality |
 
@@ -498,6 +558,8 @@ about what it does not know.
   winter is normal; the gap is disclosed, not forward-filled.
 - **`dist_major_road_m` is always NULL.** Earth Engine has no free global roads layer.
 - **Translations are machine output**, not reviewed by native speakers.
+- **Photo triage is verified only on rejection.** Synthetic images are rejected by the real
+  model; grading of genuine haze photographs has not been tested against a labelled set.
 - **Transfer accuracy is unmeasured.** The Delhi→Lucknow import works, but the
   degradation figure is only real once Lucknow's own stations are ingested. Until then
   the API returns `transfer_measured: false` rather than an estimate.
