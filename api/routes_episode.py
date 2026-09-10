@@ -19,13 +19,21 @@ from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from api import evidence as evidence_mod
 
 logger = logging.getLogger("vayusetu.api.episode")
 
-router = APIRouter(prefix="/api/v1", tags=["episode"])
+def _check_tenant(tenant: str = Path(..., pattern=r"^[a-z][a-z0-9_]{0,31}$")) -> None:
+    """
+    The tenant key is interpolated into BigQuery dataset names (vayusetu_{tenant})
+    on every route below, so it is a trust boundary. Anything that could not be a
+    dataset suffix is rejected before it reaches a query.
+    """
+
+
+router = APIRouter(prefix="/api/v1", tags=["episode"], dependencies=[Depends(_check_tenant)])
 
 # (tenant, iso-hour) -> {"evidence":..., "brief":...}
 _BRIEF_CACHE: Dict[tuple, Dict[str, Any]] = {}
@@ -126,27 +134,33 @@ def get_event(
 @router.get("/{tenant}/timeline", summary="Daily PM2.5 against its physical drivers")
 def get_timeline(
     tenant: str,
-    date_from: str = Query("2025-10-25"),
-    date_to: str = Query("2025-11-21"),
+    # Validated, because both are interpolated into the SQL below.
+    date_from: str = Query("2025-10-25", pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    date_to: str = Query("2025-11-21", pattern=r"^\d{4}-\d{2}-\d{2}$"),
 ) -> Dict[str, Any]:
     """
     The chart behind the product's central claim: fires upwind and a collapsing
-    boundary layer track PM2.5 (r = +0.55 and -0.42 over this window).
+    boundary layer track PM2.5. On these India-time days r = +0.58 and -0.48; the
+    UTC-day analysis in TODO.md gave +0.55 and -0.42, the same finding grouped
+    differently. Recompute the console's note if the window or grouping changes.
     """
     import os
     from google.cloud import bigquery
 
     project = os.environ["GCP_PROJECT_ID"]
     client = bigquery.Client(project=project)
+    # Indian calendar days, so the bar a reader picks and the date shown for it
+    # agree. Grouped by UTC date, the 01:30 IST hero hour sat on the previous
+    # day's bar.
     rows = list(client.query(f"""
-        SELECT DATE(ts) AS d,
+        SELECT DATE(ts, 'Asia/Kolkata') AS d,
                ROUND(AVG(target_pm25), 1) AS pm25,
                ROUND(MAX(target_pm25), 1) AS peak_pm25,
                ROUND(AVG(fire_count_upwind_100km_48h), 1) AS upwind_fires,
                ROUND(AVG(blh), 0) AS blh,
                COUNT(DISTINCT station_id) AS n_stations
         FROM `{project}.vayusetu_{tenant}.features_training`
-        WHERE ts >= TIMESTAMP('{date_from}') AND ts < TIMESTAMP('{date_to}')
+        WHERE ts >= TIMESTAMP('{date_from}', 'Asia/Kolkata') AND ts < TIMESTAMP('{date_to}', 'Asia/Kolkata')
         GROUP BY d ORDER BY d
     """).result())
 
@@ -224,6 +238,43 @@ def get_map(
         "stations": stations,
         "fires": fires,
     }
+
+
+# (tenant, iso-hour, lang) -> resident bundle. Only successful translations are
+# cached, so a transient Translation outage is retried on the next request instead
+# of pinning English for the life of the process.
+_RESIDENTS_CACHE: Dict[tuple, Dict[str, Any]] = {}
+
+
+@router.get("/{tenant}/residents", summary="Everything the resident view shows, in one language")
+def get_residents(
+    tenant: str,
+    ts: str = Query(...),
+    lang: str = Query("en", description="ISO code: en, hi, pa, bn, mr, ta, te, kn, ml, gu"),
+) -> Dict[str, Any]:
+    """
+    The resident page, ready to show and translated in one batched call.
+
+    Built here rather than in the browser so the plain-language explanation has a
+    single implementation, derived from measured evidence and never generated, and
+    so every word a resident reads is in their language, not only the advice.
+    """
+    from api import residents
+    from api.gemini import advisory as adv
+
+    if lang not in adv.SUPPORTED_LANGUAGES:
+        raise HTTPException(400, f"unsupported language {lang!r}; "
+                                 f"supported: {sorted(adv.SUPPORTED_LANGUAGES)}")
+
+    key = (tenant, _parse_ts(ts).isoformat(), lang)
+    if key in _RESIDENTS_CACHE:
+        return _RESIDENTS_CACHE[key]
+
+    ep = get_episode(tenant, ts, explain=True)
+    out = residents.bundle(ep["evidence"], ep.get("brief"), lang)
+    if out["translated"] or lang == "en":
+        _RESIDENTS_CACHE[key] = out
+    return out
 
 
 @lru_cache(maxsize=256)

@@ -143,7 +143,9 @@ def _translate_text(text: str, target_lang: str, project_id: str, api_key: Optio
     try:
         from google.cloud import translate_v2 as translate
         client = translate.Client()
-        result = client.translate(text, target_language=target_lang, source_language="en")
+        # format_="text": the default is HTML, which returns "don&#39;t" for "don't".
+        result = client.translate(text, target_language=target_lang, source_language="en",
+                                  format_="text")
         return result["translatedText"]
     except Exception as e:
         logger.warning("Translation API failed for lang=%s: %s. Using mock.", target_lang, e)
