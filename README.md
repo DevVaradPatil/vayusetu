@@ -16,12 +16,13 @@ VayuSetu answers the three questions that follow the number:
 | Question | Answered from |
 |---|---|
 | *What is happening?* | 70 real CPCB stations via OpenAQ |
+| *Where is it worst, far beyond the average?* | Each monitor against the robust median of the monitors around it |
 | *Why?* | NASA FIRMS fire detections, sectored by ERA5 wind; boundary layer height |
 | *Who should act, and how urgently?* | Gemini, reasoning over the measured evidence |
 
 It then says it again, in the resident's own language.
 
-The site has two views of the same hour. **For officials:** a map of monitors, fires and wind, the measured evidence, an AI explanation checked against it, and who should act. **For residents:** how bad the air is, what it means for health, what to do and why, entirely in one of ten Indian languages, with the advice read aloud and a way to send a photo of the haze. Both are written for someone who has never seen an air quality map.
+The site has two views of the same hour. **For officials:** a map of monitors, fires and wind, the measured evidence, the localities running far above everywhere around them, an AI explanation checked against it, and who should act. **For residents:** how bad the air is, what it means for health, what to do and why, entirely in one of ten Indian languages, with the advice read aloud and a way to send a photo of the haze. Both are written for someone who has never seen an air quality map.
 
 ### A real episode, generated end to end
 
@@ -42,6 +43,23 @@ November 2025 Delhi smog event:
 > sprinklers on arterial roads
 
 Every number in that brief is measured. None is generated.
+
+### The event the city average hid
+
+The same pipeline, 16 November at 11:30 IST. Every dashboard for the region showed
+**202 µg/m³** — bad, "Very Poor", an ordinary winter day. One monitor showed this:
+
+> **Arya Nagar, Bahadurgarh — 918 µg/m³. 4.4× the area around it, +711 µg/m³ above the
+> regional median, about 2,038 people in that square kilometre.**
+
+That reading was public the whole time. It was hidden by the average, which is the
+number GRAP decisions are taken on. Across the 26-day window the rule finds **251
+station-hours across 48 localities on every single day**.
+
+At the peak of the smog episode the same detector reports **nothing** — median 457,
+every monitor severe together, no local outlier. That is the correct answer, and the
+page says so instead of showing an empty table: a regional blanket needs a region-wide
+response, a local plume needs an inspection team at one address.
 
 ---
 
@@ -123,6 +141,7 @@ trapping* on its own. The conclusion follows the evidence.
 | Service | Job |
 |---|---|
 | **Gemini 3.5 Flash Lite** | Reasons over fused multi-source evidence into an attribution brief with role-addressed actions — the reasoning step, not a wrapper |
+| **BigQuery (robust statistics)** | Per-hour median and MAD across every reporting monitor, the hyper-local event detector |
 | **BigQuery** | Every observation, join and aggregation; the evidence assembly is SQL |
 | **Earth Engine** | MAIAC 1 km AOD, Sentinel-5P, WorldCover land use, GHSL population, SRTM elevation |
 | **Gemini 3.1 Flash Lite** | Triage of residents' haze photos: rejects screenshots, graphics and indoor shots, grades haze only in genuine outdoor photos, and never produces a pollution reading |
@@ -166,6 +185,7 @@ With `.env` populated (see [`docs/RUNBOOK.md`](docs/RUNBOOK.md)):
 
 ```bash
 python -m api.evidence         # assemble measured evidence for the hero episode
+python -m api.hotspots         # find hyper-local events; check both the local and regional hours
 python -m api.gemini.brief     # generate a brief and verify it against R5
 python -m uvicorn api.main:app --port 8080 --reload   # the API, from the repository root
 ```
@@ -203,6 +223,15 @@ about what it does not know.
 **Neither ML model is in the product.** Gridded estimation loses to interpolation;
 forecasting loses to diurnal persistence. Both harnesses remain in the repository so
 the result is reproducible, but no residual map and no forecast is served.
+
+**Hotspots are hidden by the average, not hidden from the monitoring network.** The
+detector compares monitors against monitors, so it can only flag a locality that already
+has one. A satellite NO₂ detector was written to cover the unmonitored case and then
+deleted: `cloud_fraction` is NULL in all 1755 rows we ingest, so cloud artefacts cannot
+be screened out, and no NO₂ anomaly in the window is spatially isolated — on 19 November
+48 cells cleared z ≥ 2 while the mean z of every other cell that day was 2.51. A detector
+that cannot tell a plume from a region-wide day should not be telling an officer where to
+go.
 
 **Attribution is correlational.** r = +0.55 between upwind fire count and city PM2.5
 over 26 days of one stubble season is a real, correctly-signed relationship with a

@@ -2,11 +2,22 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "vayusetu-web",
-      "runtimeExecutable": "npm",
+      "name": "vayusetu-api",
+      "runtimeExecutable": "python",
       "runtimeArgs": [
-        "run",
-        "dev"
+        "-m",
+        "uvicorn",
+        "api.main:app",
+        "--port",
+        "8080"
+      ],
+      "port": 8080
+    },
+    {
+      "name": "vayusetu-web",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": [
+        "node_modules/vite/bin/vite.js"
       ],
       "port": 5173,
       "cwd": "web"

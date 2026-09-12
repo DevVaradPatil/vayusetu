@@ -256,6 +256,69 @@ Every one of those numbers came out of a query.
 
 ---
 
+## 4a. Hyper-local events: the hotspot detector
+
+**File: `api/hotspots.py`.**
+
+The track asks for hidden pollution hotspots. §2 killed the way we originally meant to
+find them — model estimate minus station interpolation — so this detector uses no model
+at all. It asks one question per hour: **is any monitor reading far above the monitors
+around it?**
+
+Median and median absolute deviation over every monitor reporting that hour, then
+
+```
+robust z = (this monitor − regional median) / (MAD × 1.4826)
+```
+
+MAD rather than standard deviation, because one extreme locality would inflate a
+standard deviation and hide itself inside the baseline it is compared against. A monitor
+is flagged at `z ≥ 3.5` **and** at least 50 µg/m³ above the median **and** reading at
+least 90 µg/m³ — the two absolute floors stop a clean day producing "hotspots" that are
+20 µg/m³ above a very low median.
+
+Measured over the 26-day window that rule fires on **251 station-hours across 48
+localities on all 26 days**, so it is neither vacuous nor indiscriminate. The sharpest:
+
+| Hour (IST) | Locality | Reading | Regional median | Ratio |
+|---|---|---|---|---|
+| 16 Nov 13:30 | Arya Nagar, Bahadurgarh | 557 | 105 | 5.3× |
+| 16 Nov 11:30 | Arya Nagar, Bahadurgarh | **918** | 207 | 4.4× |
+| 31 Oct 13:30 | CRRI Mathura Road | 589 | 93 | **6.3×** |
+| 7 Nov 17:30 | NISE Gwal Pahari, Gurugram | 471 | 92 | 5.1× |
+
+That top row is the whole argument for the feature: the regional figure said 105 while
+one town breathed 557.
+
+### Reporting nothing is a result
+
+At the hero hour — the peak of the November episode — the detector flags **zero**:
+median 457, MAD 110, nothing near 3.5 σ. Every monitor was severe at once. That is the
+correct answer, not a miss, and the distinction is operational: a regional blanket needs
+a region-wide response, while a local plume needs an inspection team at one address.
+Conflating them sends people to the wrong place. So the UI never shows a bare empty
+table; it states that the whole region is affected together, and offers the hours where
+local events did occur.
+
+### The second detector we deleted
+
+A satellite NO₂ anomaly detector was written first, because Sentinel-5P is the only
+signal in this stack that could flag a place with **no monitor at all** — which is what
+"hidden" ought to mean. Two measurements killed it:
+
+- `cloud_fraction` is NULL in all **1755** satellite rows we ingest, so cloudy
+  retrievals cannot be screened out. A cloud artefact and a plume are indistinguishable.
+- No NO₂ anomaly in the window is spatially isolated. On 19 November, 48 cells cleared
+  z ≥ 2 while the mean z across **every other cell that day** was 2.51 — the whole grid
+  rose together. The remaining candidate days have 1–4 cells each, unscreenable.
+
+A detector that cannot separate a plume from a region-wide day, and cannot rule out a
+retrieval artefact, has no business telling an officer where to go. It was deleted
+rather than tuned into looking like it worked. The honest consequence is stated in §12:
+**this finds hotspots hidden by the average, not hotspots hidden from the network.**
+
+---
+
 ## 5. The AI layer
 
 **File: `api/gemini/brief.py`.** Gemini's job is the part nothing else in the stack
@@ -361,6 +424,8 @@ own (rule R4), and the resident page tells people so.
 | `GET /api/v1/{tenant}/residents?ts=&lang=` | Everything the resident view shows, translated in one batch |
 | `POST /api/v1/{tenant}/reports` | A resident's haze photo: upload gates, then Gemini triage |
 | `GET /api/v1/{tenant}/event?ts=` | The episode in the **open interchange format** (§8) |
+| `GET /api/v1/{tenant}/hotspots?ts=` | Hyper-local events for one hour, plus the whole field they stand out from |
+| `GET /api/v1/{tenant}/hotspots/top?limit=` | The sharpest local events in the window, ranked, each with its hour |
 
 Two design decisions:
 
@@ -371,7 +436,19 @@ serialised behind a lock, so a page load firing three requests — or two judges
 refreshing at once — produces **one** Gemini call, not three.
 
 **There is deliberately no endpoint serving a predicted hotspot map or a forecast.**
-Those were falsified (§2). The absence is the honest design.
+Those were falsified (§2). The absence is the honest design. `/hotspots` is not that
+endpoint: it serves measurement only — one monitor against the robust median of the
+monitors reporting in the same hour — and returns an empty list when the episode is
+regional rather than local.
+
+**Ten endpoints were deleted, not kept.** `/grid` and `/hotspots` used to rank cells by
+a Gaussian plume added in Python around a hardcoded coordinate, with
+`population_exposed` written literally as `84000 if rank == 1 else 32000`; `/forecast`
+returned a "+24h spike" that was the constant 90; `/cells/{id}` returned 310.4 for any
+cell id containing "2863". A demo that fabricates the thing the project claims to detect
+cannot be told apart from a working one, which makes it worse than no demo. The old-SDK
+modules behind them (`api/gemini/attribution.py`, `api/gemini/agent.py`, `api/alerts.py`)
+went with them.
 
 Cold call ≈ 10.7 s (BigQuery + Gemini); cached ≈ instant.
 
@@ -526,6 +603,7 @@ python -m ml.evaluate_forecast # per-horizon vs persistence and climatology
 | Path | What lives there |
 |---|---|
 | `api/evidence.py` | **The core.** Evidence assembly, upwind geometry, event rendering |
+| `api/hotspots.py` | Hyper-local event detection, measurement only (§4a) |
 | `api/gemini/brief.py` | Prompt, response schema, and the R5 verifier |
 | `api/gemini/advisory.py` | Translation into ten languages |
 | `api/routes_episode.py` | The product's endpoints, caching and generation lock |
@@ -554,6 +632,14 @@ about what it does not know.
   real, correctly-signed relationship with a clear physical mechanism. It is not a
   source-apportionment study.
 - **The upwind cone is not trajectory modelling.** ±30°, 100 km, straight-line.
+- **Hotspots are hidden by the average, not hidden from the network.** The detector
+  compares monitors against monitors, so it can only flag a place that already has one.
+  Finding an unmonitored hotspot needs the satellite detector we deleted (§4a), and that
+  needs a cloud-screened NO₂ retrieval we do not currently ingest.
+- **A hotspot is an anomaly, not an apportioned source.** It says this locality is far
+  worse than its surroundings and how many people live there. It does not say what is
+  burning; the attribution brief reasons about that separately, from the fire and
+  meteorology evidence.
 - **Winter cloud and fog mask the satellite input.** 30–50% missing MAIAC AOD in Delhi
   winter is normal; the gap is disclosed, not forward-filled.
 - **`dist_major_road_m` is always NULL.** Earth Engine has no free global roads layer.

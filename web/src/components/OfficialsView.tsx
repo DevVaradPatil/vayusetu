@@ -1,13 +1,15 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Broadcast, ClockCounterClockwise, Compass, Fire, Question, Warning } from '@phosphor-icons/react';
 import BriefPanel from './BriefPanel';
 import Guide from './Guide';
+import Hotspots from './Hotspots';
 import InfoTip from './InfoTip';
 import MapView, { type Layers } from './MapView';
 import Timeline from './Timeline';
 import {
-  band, BANDS, fetchEpisode, fetchMap, fetchResidents, fetchTimeline, fmtLong, tsForIstDay,
-  type Day, type Episode, type Evidence, type MapData, type Residents,
+  band, BANDS, fetchEpisode, fetchHotspots, fetchMap, fetchResidents, fetchTimeline, fmtLong,
+  tsForIstDay,
+  type Day, type Episode, type Evidence, type HotspotHour, type MapData, type Residents,
 } from '../lib/data';
 import { compassWords, EXPLAIN, inkOn } from '../lib/plain';
 
@@ -21,7 +23,8 @@ import { compassWords, EXPLAIN, inkOn } from '../lib/plain';
  *
  * There is deliberately no predicted-hotspot layer and no forecast: both lost to
  * simple baselines (TODO.md). Everything here is observed, or is reasoning checked
- * against something observed.
+ * against something observed. The hotspots panel is measurement too — a monitor
+ * against the monitors around it — which is why it can honestly report none.
  */
 
 const GUIDE_KEY = 'vayusetu-guide-hidden';
@@ -56,6 +59,7 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
   const [episode, setEpisode] = useState<Episode | null>(null);
   const [mapData, setMapData] = useState<MapData | null>(null);
   const [plain, setPlain] = useState<Residents | null>(null);
+  const [hot, setHot] = useState<HotspotHour | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
@@ -73,12 +77,13 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
     let cancelled = false;
     setLoading(true);
     setErr(null);
-    Promise.all([fetchEpisode(ts), fetchMap(ts), fetchResidents(ts, 'en')])
-      .then(([ep, mp, pl]) => {
+    Promise.all([fetchEpisode(ts), fetchMap(ts), fetchResidents(ts, 'en'), fetchHotspots(ts)])
+      .then(([ep, mp, pl, hs]) => {
         if (cancelled) return;
         setEpisode(ep);
         setMapData(mp);
         setPlain(pl);
+        setHot(hs);
       })
       .catch(e => { if (!cancelled) setErr(friendly(e)); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -91,6 +96,11 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
   };
 
   const ev = episode?.evidence ?? null;
+  // Matched by name because that is what the map layer carries for each monitor.
+  const hotNames = useMemo(
+    () => new Set((hot?.hotspots ?? []).map(h => h.name)),
+    [hot],
+  );
 
   return (
     <>
@@ -107,7 +117,7 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
 
       <main className="app-grid">
         <section className="panel map-panel" aria-label="Map of air monitors, fires and wind">
-          <MapView data={mapData} ev={ev} layers={layers} theme={theme} />
+          <MapView data={mapData} ev={ev} layers={layers} theme={theme} hotspots={hotNames} />
 
           <div className="map-overlay map-controls" role="group" aria-label="Show on map">
             {LAYERS.map(({ key, Icon, text }) => (
@@ -154,6 +164,8 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
           />
         </section>
       </main>
+
+      <Hotspots hours={hot} loading={loading} onTs={onTs} />
 
       <section className="panel panel-pad" aria-labelledby="timeline-title">
         <h2 id="timeline-title" className="section-title">Four weeks of air quality, and what drove it</h2>

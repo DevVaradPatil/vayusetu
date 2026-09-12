@@ -9,6 +9,10 @@ predicted hotspot map.
 Briefs are cached by (tenant, hour). Gemini generation is the slow and rate-limited
 step, the inputs for a past hour never change, and a demo hits the same episode
 repeatedly — so regenerating would burn quota to produce the same paragraph.
+
+The hotspot routes serve `api/hotspots.py`, which is measurement only: a monitor
+standing above the robust median of the monitors around it. They replaced two
+endpoints that ranked cells by a Gaussian plume invented in Python.
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from api import evidence as evidence_mod
+from api import hotspots as hotspots_mod
 
 logger = logging.getLogger("vayusetu.api.episode")
 
@@ -180,6 +185,31 @@ def get_timeline(
             for r in rows
         ],
     }
+
+
+@router.get("/{tenant}/hotspots", summary="Localities standing above the regional field")
+def get_hotspots(
+    tenant: str,
+    ts: str = Query(...),
+) -> Dict[str, Any]:
+    """
+    Hyper-local events for one hour.
+
+    Returns the whole field of reporting monitors, not only the flagged ones: an
+    outlier is only meaningful next to what it is an outlier from. An empty
+    `hotspots` list during a regional episode is the correct answer.
+    """
+    at = _parse_ts(ts)
+    return hotspots_mod.station_hotspots(at.strftime("%Y-%m-%d %H:00:00"), tenant)
+
+
+@router.get("/{tenant}/hotspots/top", summary="The worst local events in the window, ranked")
+def get_top_events(
+    tenant: str,
+    limit: int = Query(12, ge=1, le=50),
+) -> Dict[str, Any]:
+    """Where the worst hyper-local events have been, so the console can jump to one."""
+    return hotspots_mod.top_events(tenant, limit)
 
 
 @router.get("/{tenant}/map", summary="Stations, fires and wind for one hour")

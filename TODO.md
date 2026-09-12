@@ -81,6 +81,73 @@ enabled, all three datasets and 16 tables created, and real data landed.
 
 ---
 
+## FINDING 2026-09-12 — hotspots are findable by measurement; the satellite half is not
+
+Built the track's "hidden pollution hotspots" capability without the falsified
+residual. Two detectors written, one kept.
+
+### Kept: station excess, robust z against the same hour's monitors
+
+`z = (monitor - regional median) / (MAD x 1.4826)`, flagged at z >= 3.5 AND at least
+50 ug/m3 above the median AND at least 90 ug/m3 absolute.
+
+Measured over the ingested window: **251 station-hours clear the rule, across 48
+localities, on all 26 days.** z_max = 25.2. Counts at looser cuts: 376 at z >= 3.0,
+614 at z >= 2.5, 402 at >= 2x the median. So the rule is neither vacuous nor
+indiscriminate, and 3.5 was kept rather than tuned to make a number look good.
+
+| Hour (IST) | Locality | Reading | Regional median | Ratio |
+|---|---|---|---|---|
+| 16 Nov 13:30 | Arya Nagar, Bahadurgarh | 557 | 105 | 5.3x |
+| 16 Nov 11:30 | Arya Nagar, Bahadurgarh | 918 | 207 | 4.4x |
+| 31 Oct 13:30 | CRRI Mathura Road | 589 | 93 | 6.3x |
+| 7 Nov 17:30 | NISE Gwal Pahari, Gurugram | 471 | 92 | 5.1x |
+
+**The hero hour flags zero, and that is correct.** At 12 Nov 01:30 IST the median is
+457 with MAD 110 — every monitor severe at once, no local outlier. The first
+self-check returning 0 looked like a broken detector; the window-wide diagnostic
+proved the signal is real and simply absent during a uniform regional episode. The
+product now uses that distinction rather than hiding it: a regional blanket needs a
+region-wide response, a local plume needs an inspection team at one address.
+
+### Deleted: satellite NO2 anomaly
+
+Sentinel-5P was the one signal that could flag a place with **no monitor**, which is
+what "hidden" ought to mean. Two measurements killed it.
+
+- `cloud_fraction` is **NULL in all 1755 rows** of `raw_satellite`. The ingestion
+  never populated it, so cloudy retrievals cannot be screened out at all.
+- **No NO2 anomaly in the window is spatially isolated.** Per-cell z against each
+  cell's own 14-day baseline: max z = 3.63, 69 cell-days at z >= 2. On 19 Nov, 48
+  cells cleared z >= 2 while the mean z of *every other cell that day* was 2.51 —
+  the whole grid rose together. The only other candidates are 20 Nov (14 cells,
+  others at 0.89) and 8/10/18 Nov (4, 2, 1 cells), none screenable for cloud.
+
+A detector that cannot separate a plume from a region-wide day, and cannot rule out a
+retrieval artefact, has no business telling an officer where to go. Deleted rather
+than tuned. Stated consequence: **we find hotspots hidden by the average, not hotspots
+hidden from the monitoring network.**
+
+To revive it: ingest the S5P `cloud_fraction` band (or QA `qa_value >= 0.75`) and add
+a spatial-isolation test — flag a cell only when its neighbours did *not* also rise.
+
+### Also deleted: ten fabricated endpoints
+
+Wiring the real detector collided with a fake one. `GET /api/v1/{tenant}/hotspots`
+already existed and ranked cells by `130 * exp(-dist/0.08)` — a Gaussian plume added
+in Python around a hardcoded coordinate — with `population_exposed` written literally
+as `84000 if rank == 1 else 32000` and a constant `likely_source` string. `/forecast`
+returned a "+24h spike" that was the constant 90. `/cells/{id}` returned 310.4 for any
+cell id containing "2863". All removed, with `/grid`, `/stations/current`,
+`/cells/{id}/attribution`, `/alerts`, `/advisory`, `/advisory/languages` and `/ask`,
+plus the old-SDK modules behind them (`api/gemini/attribution.py`,
+`api/gemini/agent.py`, `api/alerts.py`). Alerts will be rebuilt against real evidence.
+
+A demo that fabricates the thing the project claims to detect cannot be told apart
+from a working one, which makes it worse than no demo.
+
+---
+
 ## FINDING 2026-09-08c — Model B also loses; attribution is the pillar that holds
 
 ### Model B (forecasting) — fails against the fair baseline

@@ -54,6 +54,11 @@ export const EXPLAIN = {
   replay:
     'A real smog episode from November 2025, replayed with the actual data. Delhi’s live ' +
     'monitor feed is patchy right now, so a complete past event shows the system best.',
+  hotspot:
+    'One monitor reading far above the monitors around it in the same hour — a local source ' +
+    'such as burning waste or a stalled traffic corridor, rather than a bad day everywhere. ' +
+    'It is measured, never predicted: we compare each monitor with the middle reading of all ' +
+    'the others, and flag it only if it is well clear of them and high enough to matter.',
 };
 
 const at = (obj: unknown, path: string): unknown =>

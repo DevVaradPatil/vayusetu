@@ -109,6 +109,40 @@ export interface Episode {
   cached: boolean;
 }
 
+/**
+ * One monitor measured against the monitors around it.
+ *
+ * `is_hotspot` is the API's own judgement, not the website's: the rule lives in
+ * `api/hotspots.py` and the numbers it judged on travel with the row, so the page
+ * shows the evidence rather than re-deciding.
+ */
+export interface Hotspot {
+  station_id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  pm25: number;
+  excess_over_median: number;
+  times_regional: number | null;
+  robust_z: number | null;
+  population_in_cell: number | null;
+  is_hotspot: boolean;
+  /** Only on /hotspots/top, where each row is a different hour. */
+  ts?: string;
+  regional_median?: number;
+  n_reporting?: number;
+}
+
+export interface HotspotHour {
+  ts: string;
+  regional_median: number | null;
+  spread_mad: number | null;
+  n_reporting: number;
+  method: string;
+  hotspots: Hotspot[];
+  field: Hotspot[];
+}
+
 /** The resident page's words, already translated by /residents. */
 export interface Residents {
   lang: string;
@@ -166,6 +200,12 @@ export const fetchTimeline = () =>
 export const fetchEpisode = (ts: string) => get<Episode>(`/api/v1/${TENANT}/episode?${q(ts)}`);
 
 export const fetchMap = (ts: string) => get<MapData>(`/api/v1/${TENANT}/map?${q(ts)}`);
+
+export const fetchHotspots = (ts: string) =>
+  get<HotspotHour>(`/api/v1/${TENANT}/hotspots?${q(ts)}`);
+
+export const fetchTopEvents = (limit = 8) =>
+  get<{ method: string; events: Hotspot[] }>(`/api/v1/${TENANT}/hotspots/top?limit=${limit}`);
 
 export const fetchAdvisory = (ts: string, lang: string, audio = false) =>
   get<{ text: string; lang: string; translated: boolean; audio_base64?: string | null }>(

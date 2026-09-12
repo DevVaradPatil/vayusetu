@@ -65,6 +65,8 @@ interface Props {
   ev: Evidence | null;
   layers: Layers;
   theme: 'light' | 'dark';
+  /** Names of monitors the API flagged as hyper-local events, drawn with a ring. */
+  hotspots?: Set<string>;
 }
 
 /**
@@ -101,7 +103,7 @@ const esc = (s: string) =>
 
 const styleFor = (theme: 'light' | 'dark') => (theme === 'dark' ? DARK_STYLE : LIGHT_STYLE);
 
-export default function MapView({ data, ev, layers, theme }: Props) {
+export default function MapView({ data, ev, layers, theme, hotspots }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const map = useRef<google.maps.Map | null>(null);
   const shapes = useRef<{ setMap: (m: google.maps.Map | null) => void }[]>([]);
@@ -230,7 +232,8 @@ export default function MapView({ data, ev, layers, theme }: Props) {
     // --- Monitors ------------------------------------------------------------
     if (layers.stations) {
       for (const s of data?.stations ?? []) {
-        const worst = !!ev && s.name === ev.worst_station.name;
+        const hot = !!hotspots?.has(s.name);
+        const worst = hot || (!!ev && s.name === ev.worst_station.name);
         const b = band(s.pm25);
         const c = add(new google.maps.Circle({
           map: m, center: { lat: s.lat, lng: s.lon },
@@ -243,7 +246,8 @@ export default function MapView({ data, ev, layers, theme }: Props) {
         }));
         c.addListener('click', () => openInfo({ lat: s.lat, lng: s.lon }, `
           <div class="iw">
-            <div class="iw-kicker">${worst ? 'Worst reading in the city' : 'Air monitor'}</div>
+            <div class="iw-kicker">${hot ? 'Hyper-local event'
+              : worst ? 'Worst reading in the city' : 'Air monitor'}</div>
             <div class="iw-title">${esc(s.name)}</div>
             <div class="iw-row"><span class="iw-value num">${s.pm25.toFixed(0)}</span>
               <span class="iw-unit">µg/m³ PM2.5</span></div>
@@ -251,7 +255,7 @@ export default function MapView({ data, ev, layers, theme }: Props) {
           </div>`));
       }
     }
-  }, [ready, data, ev, layers, theme]);
+  }, [ready, data, ev, layers, theme, hotspots]);
 
   // Frame the episode when the hour changes: the analysis moved, so the view follows.
   useEffect(() => {
