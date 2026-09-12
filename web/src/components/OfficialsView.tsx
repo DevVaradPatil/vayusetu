@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Broadcast, ClockCounterClockwise, Compass, Fire, Question, Warning } from '@phosphor-icons/react';
+import AlertInbox from './AlertInbox';
 import BriefPanel from './BriefPanel';
 import Guide from './Guide';
 import Hotspots from './Hotspots';
@@ -166,6 +167,8 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
       </main>
 
       <Hotspots hours={hot} loading={loading} onTs={onTs} />
+
+      <AlertInbox ts={ts} reloadKey={retry} />
 
       <section className="panel panel-pad" aria-labelledby="timeline-title">
         <h2 id="timeline-title" className="section-title">Four weeks of air quality, and what drove it</h2>

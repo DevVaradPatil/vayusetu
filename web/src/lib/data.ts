@@ -143,6 +143,38 @@ export interface HotspotHour {
   field: Hotspot[];
 }
 
+/**
+ * One alert in the mock inbox.
+ *
+ * `recipients` are display names of demo accounts. There is no contact detail in the
+ * system to show — by design (AGENTS.md R6), no address of any kind exists.
+ */
+export interface Alert {
+  alert_id: string;
+  trigger_kind: 'hyper_local_event' | 'regional_episode';
+  severity: 'watch' | 'warning' | 'emergency';
+  state: 'open' | 'acknowledged' | 'resolved';
+  headline: string;
+  location_name: string;
+  lat: number | null;
+  lon: number | null;
+  observed_pm25: number | null;
+  population_exposed: number | null;
+  recipients: string[];
+  evidence: Record<string, unknown> | null;
+  issued_at: string | null;
+  ts_hour: string | null;
+  acknowledged_by: string | null;
+  resolved_by: string | null;
+}
+
+/** What an hour would raise, without raising it. */
+export interface AlertPreview {
+  ts: string;
+  candidates: { trigger_kind: string; severity: string; headline: string; recipients: string[] }[];
+  no_trigger_reason: string | null;
+}
+
 /** The resident page's words, already translated by /residents. */
 export interface Residents {
   lang: string;
@@ -206,6 +238,33 @@ export const fetchHotspots = (ts: string) =>
 
 export const fetchTopEvents = (limit = 8) =>
   get<{ method: string; events: Hotspot[] }>(`/api/v1/${TENANT}/hotspots/top?limit=${limit}`);
+
+/** The demo accounts alerts are dispatched to. No real official is reachable from here. */
+export const ACTORS: { key: string; label: string }[] = [
+  { key: 'mock_district_officer', label: 'Demo: District Environment Officer' },
+  { key: 'mock_pollution_board', label: 'Demo: State Pollution Control Board' },
+  { key: 'mock_municipal', label: 'Demo: Municipal Corporation' },
+  { key: 'mock_traffic_police', label: 'Demo: Traffic Police Control Room' },
+];
+
+export const fetchAlerts = () =>
+  get<{ alerts: Alert[] }>(`/api/v1/${TENANT}/alerts`).then(d => d.alerts ?? []);
+
+export const previewAlerts = (ts: string) =>
+  get<AlertPreview>(`/api/v1/${TENANT}/alerts/preview?${q(ts)}`);
+
+const post = async <T>(path: string): Promise<T> => {
+  const r = await fetch(`${API}${path}`, { method: 'POST' });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText} on ${path}`);
+  return r.json();
+};
+
+/** Raising alerts is a deliberate POST, never something a page load can do. */
+export const dispatchAlerts = (ts: string) =>
+  post<{ dispatched: number }>(`/api/v1/${TENANT}/alerts/dispatch?${q(ts)}`);
+
+export const actOnAlert = (id: string, action: 'acknowledge' | 'resolve', actor: string) =>
+  post<{ by: string }>(`/api/v1/${TENANT}/alerts/${id}/${action}?actor=${encodeURIComponent(actor)}`);
 
 export const fetchAdvisory = (ts: string, lang: string, audio = false) =>
   get<{ text: string; lang: string; translated: boolean; audio_base64?: string | null }>(

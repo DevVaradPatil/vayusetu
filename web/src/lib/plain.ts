@@ -54,6 +54,12 @@ export const EXPLAIN = {
   replay:
     'A real smog episode from November 2025, replayed with the actual data. Delhi’s live ' +
     'monitor feed is patchy right now, so a complete past event shows the system best.',
+  alerts:
+    'An alert is raised from what the monitors actually read this hour — a locality far ' +
+    'above its neighbours, or the whole region in the Severe band. Never from a forecast: ' +
+    'we tested a day-ahead warning and it was no better than a calendar, so we do not ' +
+    'ship one. Every recipient here is a demo account; no real official can be contacted ' +
+    'from this system.',
   hotspot:
     'One monitor reading far above the monitors around it in the same hour — a local source ' +
     'such as burning waste or a stalled traffic corridor, rather than a bad day everywhere. ' +

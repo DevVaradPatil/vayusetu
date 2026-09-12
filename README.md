@@ -19,6 +19,7 @@ VayuSetu answers the three questions that follow the number:
 | *Where is it worst, far beyond the average?* | Each monitor against the robust median of the monitors around it |
 | *Why?* | NASA FIRMS fire detections, sectored by ERA5 wind; boundary layer height |
 | *Who should act, and how urgently?* | Gemini, reasoning over the measured evidence |
+| *Was anybody told, and did they pick it up?* | An alert inbox with acknowledge and resolve, dispatched to demo accounts only |
 
 It then says it again, in the resident's own language.
 
@@ -270,8 +271,12 @@ photographs has not yet been tested against a labelled set.
 score. They never set a PM2.5 value and never trigger an alert on their own —
 untrusted input must not be able to dispatch a government response.
 
-**Alerts go to mock accounts.** No real official's contact details exist anywhere in
-this codebase, including in tests and demo data.
+**Alerts go to mock accounts, and fire on observations only.** A recipient has a role
+key and a display name and no address field of any kind — no email, no phone, no
+webhook — so no string here could be pasted into a mailer. Raising an alert is a POST a
+person presses; previewing is a GET that writes nothing, so no page load can notify
+anyone. Triggers are a Severe hour now or a hyper-local event now, never a forecast: the
+day-ahead warning was tested and did not beat a calendar.
 
 **Transfer accuracy is unmeasured.** The Delhi-to-Lucknow import works, but the
 degradation figure will only be real once Lucknow's own stations have been ingested

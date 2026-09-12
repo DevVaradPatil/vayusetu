@@ -443,6 +443,10 @@ own (rule R4), and the resident page tells people so.
 | `GET /api/v1/{tenant}/event?ts=` | The episode in the **open interchange format** (§8) |
 | `GET /api/v1/{tenant}/hotspots?ts=` | Hyper-local events for one hour, plus the whole field they stand out from |
 | `GET /api/v1/{tenant}/hotspots/top?limit=` | The sharpest local events in the window, ranked, each with its hour |
+| `GET /api/v1/{tenant}/alerts?status=` | The mock alert inbox |
+| `GET /api/v1/{tenant}/alerts/preview?ts=` | What this hour would raise — **writes nothing** |
+| `POST /api/v1/{tenant}/alerts/dispatch?ts=` | Raise them, idempotently |
+| `POST /api/v1/{tenant}/alerts/{id}/{acknowledge\|resolve}?actor=` | Act on one, as a named mock account |
 
 Two design decisions:
 
@@ -473,6 +477,53 @@ Cold call ≈ 10.7 s (BigQuery + Gemini); cached ≈ instant.
 interpolated into BigQuery dataset names and the timeline's dates into its query, so one
 router-level dependency restricts the tenant to a dataset-safe key and the dates are
 pattern-checked. A backtick tenant or SQL in `date_from` returns 422.
+
+---
+
+## 6a. Alerts
+
+**File: `api/alerts.py`.**
+
+The track asks us to alert authorities for rapid intervention. Two properties of this
+engine are consequences of measurements, not preferences.
+
+**It fires on observed conditions, never on a prediction.** The day-ahead warning was
+built and falsified (§2.4). A trigger is therefore always something happening now:
+
+| Trigger | Condition | Severity from |
+|---|---|---|
+| `hyper_local_event` | A monitor flagged by §4a | Observed value, ratio to its surroundings (≥ 3× is an emergency) |
+| `regional_episode` | Regional median in the CPCB Severe band (≥ 250) | ≥ 250 warning, ≥ 350 emergency |
+
+Nothing fires below Severe. Very Poor is most of a Delhi winter, and an alert that
+fires every day is an alert nobody reads.
+
+**Severity no longer comes from `residual`.** The previous engine keyed off model
+estimate minus interpolation — the quantity this project falsified first — so it was
+deleted rather than ported.
+
+### Two guards that are about the shape of the code, not this demo
+
+**Raising is a POST; previewing is a GET that writes nothing.** Every recipient here is
+a demo account, so no page load could notify anyone either way. The split exists because
+a page load that dispatches is one wiring change away from paging a real official, and
+that change should have to be visible in a diff.
+
+**R6, enforced by construction.** Recipients have a role key and a display name and
+**no address field of any kind** — no email, no phone, no webhook. There is no string in
+this codebase that could be pasted into a mailer or mistaken for a real contact. The
+self-check asserts it: a recipient name containing `@` or a digit fails the test.
+
+Acting requires naming which mock account you are, and the row records it. An alert
+nobody is accountable for is the failure mode the inbox exists to prevent. Resolving an
+alert that was never acknowledged backfills the acknowledgement, so the trail has no
+gap.
+
+Alert ids are `sha1(tenant|trigger|key|hour)`, so re-scanning an hour updates rather
+than duplicates — an inbox that grows a copy per reload is unreadable during exactly the
+episode when it matters. Writes go through `MERGE`/`UPDATE` DML rather than the
+streaming API, because streamed rows cannot be updated for up to 30 minutes and
+acknowledging an alert seconds after it is raised is the normal case.
 
 ---
 
@@ -621,6 +672,7 @@ python -m ml.evaluate_forecast # per-horizon vs persistence and climatology
 |---|---|
 | `api/evidence.py` | **The core.** Evidence assembly, upwind geometry, event rendering |
 | `api/hotspots.py` | Hyper-local event detection, measurement only (§4a) |
+| `api/alerts.py` | Alert triggers on observed conditions, mock-only dispatch (§6a) |
 | `api/gemini/brief.py` | Prompt, response schema, and the R5 verifier |
 | `api/gemini/advisory.py` | Translation into ten languages |
 | `api/routes_episode.py` | The product's endpoints, caching and generation lock |

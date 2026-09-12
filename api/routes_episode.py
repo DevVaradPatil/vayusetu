@@ -13,6 +13,10 @@ repeatedly — so regenerating would burn quota to produce the same paragraph.
 The hotspot routes serve `api/hotspots.py`, which is measurement only: a monitor
 standing above the robust median of the monitors around it. They replaced two
 endpoints that ranked cells by a Gaussian plume invented in Python.
+
+Alerts are split into `preview` (a GET that writes nothing) and `dispatch` (a POST).
+Loading a page must never be able to notify anyone — the recipients here are all mock
+accounts, but the shape of the code is what keeps that true after the next change.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from api import evidence as evidence_mod
+from api import alerts as alerts_mod
 from api import hotspots as hotspots_mod
 
 logger = logging.getLogger("vayusetu.api.episode")
@@ -210,6 +215,56 @@ def get_top_events(
 ) -> Dict[str, Any]:
     """Where the worst hyper-local events have been, so the console can jump to one."""
     return hotspots_mod.top_events(tenant, limit)
+
+
+@router.get("/{tenant}/alerts", summary="The mock alert inbox")
+def get_alerts(
+    tenant: str,
+    status: Optional[str] = Query(None, pattern="^(open|acknowledged|resolved)$"),
+    limit: int = Query(50, ge=1, le=200),
+) -> Dict[str, Any]:
+    """Every alert raised for this tenant. Recipients are mock accounts only (R6)."""
+    return alerts_mod.inbox(tenant, status, limit)
+
+
+@router.get("/{tenant}/alerts/preview", summary="What this hour would raise, without raising it")
+def preview_alerts(tenant: str, ts: str = Query(...)) -> Dict[str, Any]:
+    """
+    Evaluate the triggers for one hour and write nothing.
+
+    Separate from dispatch on purpose: loading a page must never be able to notify
+    anyone, even in a system whose recipients are all mock accounts. The habit is the
+    point — this code would otherwise be one wiring change away from paging a real
+    official on a page view.
+    """
+    at = _parse_ts(ts)
+    return alerts_mod.evaluate(at.strftime("%Y-%m-%d %H:00:00"), tenant)
+
+
+@router.post("/{tenant}/alerts/dispatch", summary="Raise alerts for one hour to the mock inbox")
+def dispatch_alerts(tenant: str, ts: str = Query(...)) -> Dict[str, Any]:
+    """
+    Deliberate, and idempotent: alert ids are derived from the trigger and the hour, so
+    dispatching the same hour twice updates nothing rather than filling the inbox with
+    copies during exactly the episode when it needs to be readable.
+    """
+    at = _parse_ts(ts)
+    return alerts_mod.dispatch(at.strftime("%Y-%m-%d %H:00:00"), tenant)
+
+
+@router.post("/{tenant}/alerts/{alert_id}/{action}", summary="Acknowledge or resolve an alert")
+def act_on_alert(
+    tenant: str,
+    alert_id: str = Path(..., pattern=r"^alert_[0-9a-f]{16}$"),
+    action: str = Path(..., pattern="^(acknowledge|resolve)$"),
+    actor: str = Query(..., description="A mock recipient key; nothing else exists"),
+) -> Dict[str, Any]:
+    try:
+        return alerts_mod.set_state(alert_id, action, actor, tenant)
+    except KeyError:
+        raise HTTPException(404, f"no alert {alert_id}")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/{tenant}/map", summary="Stations, fires and wind for one hour")

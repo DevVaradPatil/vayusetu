@@ -158,7 +158,16 @@ TABLE_SCHEMAS = {
             attribution JSON,
             recipients ARRAY<STRING>,
             acknowledged_at TIMESTAMP,
-            acknowledged_by STRING
+            acknowledged_by STRING,
+            trigger_kind STRING,
+            headline STRING,
+            location_name STRING,
+            lat FLOAT64,
+            lon FLOAT64,
+            observed_pm25 FLOAT64,
+            resolved_at TIMESTAMP,
+            resolved_by STRING,
+            ts_hour TIMESTAMP
         );
     """
 }
