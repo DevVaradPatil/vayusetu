@@ -81,6 +81,94 @@ enabled, all three datasets and 16 tables created, and real data landed.
 
 ---
 
+## FINDING 2026-09-12b — day-ahead early warning is NOT supportable on 26 nights
+
+Third falsification, and the same structural trap as Model B. The track asks us to
+forecast air-quality spikes; we tried, measured it properly, and it does not hold.
+
+### Setup — genuine forecasts, not hindsight
+
+The forecast meteorology already in BigQuery is useless for this: `is_forecast=TRUE`
+covers **September 2026, 7 cells, 4 days** and does not overlap the November 2025
+window at all. Using the window's *observed* weather as a stand-in would grade the
+rule as if it had a perfect weather forecast, so that was rejected.
+
+Instead, real archived model runs from Open-Meteo's historical-forecast API, via the
+`_previous_day1` variants: the same valid hour as predicted **24 hours earlier**. All
+648 hours of the window are populated, and the values genuinely differ from the
+analysis (12 Nov 01:00 UTC: 287 deg forecast vs 282 deg observed).
+
+**`boundary_layer_height_previous_day1` is entirely NULL (0/96).** Our strongest
+driver (r = -0.48) is not forecastable from this source, so the attempt used
+stagnation proxies: wind speed, gusts, RH, temperature, dew point, pressure, cloud.
+
+Target: night mean PM2.5 (00:00-06:00 IST) >= 250. Base rate **10 of 26 nights**.
+
+### The seasonal trend eats almost everything
+
+Over 26 consecutive days from late October into November, temperature falls and PM2.5
+rises together. **The day index alone correlates r = +0.691 with night PM2.5.**
+
+| Predictor (24h lead) | r with PM2.5 | r with day index | partial r |
+|---|---|---|---|
+| dew_point_2m | -0.781 | -0.722 | **-0.564** |
+| relative_humidity_2m | -0.608 | -0.312 | **-0.571** |
+| temperature_2m | -0.723 | -0.909 | -0.314 |
+| surface_pressure | +0.588 | +0.710 | +0.190 |
+| wind_direction_10m | +0.422 | +0.553 | **+0.066** |
+| cloud_cover | -0.441 | -0.493 | -0.159 |
+
+Wind direction, the thing an attribution product would most want to forecast, has
+essentially no signal once the calendar is removed.
+
+### Skill, scored leave-one-out against fair baselines
+
+Thresholds fitted on 25 nights, applied to the held-out night.
+
+| Rule | hits | misses | false | POD | FAR | Peirce |
+|---|---|---|---|---|---|---|
+| always warn (climatology) | 10 | 0 | 16 | 1.00 | 1.00 | +0.00 |
+| persistence: tonight was Severe | 6 | 4 | 3 | 0.60 | 0.19 | +0.41 |
+| forecast dew point low (LOO) | 8 | 2 | 3 | 0.80 | 0.19 | +0.61 |
+| forecast dew point, 48h lead | 8 | 2 | 3 | 0.80 | 0.19 | +0.61 |
+| **calendar only: warn after day k** | **9** | **1** | **3** | **0.90** | **0.19** | **+0.71** |
+
+**"Warn after 6 November" beats every weather forecast we can build.** That is the
+whole finding. The apparent skill is the seasonal ramp, exactly as +42% over plain
+persistence was the diurnal cycle in 2026-09-08c.
+
+And the edge over persistence does not survive its own uncertainty:
+**Peirce +0.20, bootstrap 90% CI -0.16 .. +0.56** (4000 resamples). With 10 events we
+cannot distinguish the rule from persistence.
+
+### Within the high season, the weather separates nothing
+
+Removing the ramp by restricting to 6-19 Nov (14 nights, 10 Severe, 4 not): best
+separation is dew point at **0.83 sd**, and the best *in-sample* Peirce — fitted and
+evaluated on the same 14 nights, so a hard upper bound — is only +0.45. The rule is
+being asked to separate 231 and 241 (not Severe) from 250, while the highest dew point
+in the window, 19 Nov, **is** Severe at 267. That is measurement noise, not skill.
+
+### Decision
+
+**No forecast endpoint ships.** A warning that claims day-ahead skill it cannot
+demonstrate would be the most harmful thing in this project: an official who evacuates
+a school district on it, or who stops trusting it after two false alarms, is worse off
+than with no warning.
+
+What ships instead: alerts on **observed** conditions (an episode now, a hyper-local
+event now), which is what "alert authorities for rapid intervention" needs and which
+rests on measurement. Where a forward-looking statement is shown at all, it is the
+measured frequency of what followed nights like this one (6 of 10), labelled as a
+historical frequency from 26 nights, never as a prediction.
+
+To revive this honestly: 3+ seasons of nights so the seasonal ramp is a covariate
+rather than the whole signal, plus a forecast BLH source (ECMWF/IFS boundary layer, or
+GFS PBL height) since the one driver with a clear mechanism is the one we cannot
+currently forecast.
+
+---
+
 ## FINDING 2026-09-12 — hotspots are findable by measurement; the satellite half is not
 
 Built the track's "hidden pollution hotspots" capability without the falsified

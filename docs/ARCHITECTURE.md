@@ -51,7 +51,8 @@ That residual was going to be the product.
 | 3 | The model wins where stations are sparse | Subsampled the network from 67 → 5 stations, 3 draws each | **No** — loses at every density, and loses *worse* when sparse (−13.1% at 5 stations) |
 | 4 | Satellite AOD explains where interpolation is wrong | Correlated daily IDW error against AOD | **No** — r = +0.04 |
 | 5 | The 72-hour forecaster beats persistence | Per-horizon backtest | **No** — see below |
-| 6 | **Upwind fires + boundary layer explain the episodes** | 26 days of the real stubble season | **Yes** — r = **+0.55**, **−0.42** |
+| 6 | A day-ahead "will tonight be Severe?" warning beats the calendar | Real archived 24 h model runs, leave-one-out thresholds, 26 nights | **No** — "warn after 6 Nov" scores Peirce **+0.71** against the best weather rule's **+0.61** |
+| 7 | **Upwind fires + boundary layer explain the episodes** | 26 days of the real stubble season | **Yes** — r = **+0.55**, **−0.42** |
 
 Grouped by UTC day. On the Indian calendar days the website's chart uses, the same data
 gives +0.58 and -0.48.
@@ -95,7 +96,23 @@ useful.** Nobody has a baseline that says "35 fires are burning 8 km upwind of y
 worst station under a 65 m inversion." It is also the half no AQI app offers.
 
 So the product became attribution-first. The ML harnesses stay in the repository so
-the result is reproducible, but **no residual map and no forecast is served.**
+the result is reproducible, but **no residual map, no forecast and no predictive warning
+is served.**
+
+The warning was the last thing tested, in September 2026, and it failed the same way
+Model B did. Scored against genuine 24-hour-lead forecasts (Open-Meteo's archived model
+runs, not the window's own observed weather) with leave-one-out thresholds, a
+"tonight will be Severe" rule reaches Peirce **+0.61** — but **"warn after 6 November"
+reaches +0.71.** Over 26 consecutive nights of one seasonal ramp the calendar is the
+better predictor, so the apparent skill is the season, not the weather. Its edge over
+persistence is +0.20 with a bootstrap 90% CI of **−0.16 to +0.56**. And
+`boundary_layer_height_previous_day1` is NULL for every hour of the archive, so the one
+driver with a clean mechanism is the one that cannot be forecast at all. Harness:
+`ml/evaluate_warning.py`. Full numbers: TODO.md 2026-09-12b.
+
+**Alerts therefore fire on observed conditions, not predicted ones** (§6a). An official
+who evacuates a school district on a warning we cannot demonstrate, or who stops
+trusting the system after two false alarms, is worse off than with no warning at all.
 
 > `ml/registry.py` enforces this in code: `publish_model_card()` refuses any model
 > whose leave-one-station-out MAE is not better than the IDW baseline. It refused ours.
@@ -609,7 +626,7 @@ python -m ml.evaluate_forecast # per-horizon vs persistence and climatology
 | `api/routes_episode.py` | The product's endpoints, caching and generation lock |
 | `api/main.py` | App composition, CORS, `.env` loading |
 | `ingestion/` | OpenAQ, FIRMS, Open-Meteo, Earth Engine → BigQuery, all idempotent MERGE upserts |
-| `ml/evaluate.py`, `ml/forecast_real.py` | The falsified models, kept reproducible |
+| `ml/evaluate.py`, `ml/forecast_real.py`, `ml/evaluate_warning.py` | The falsified models and the falsified warning, kept reproducible |
 | `ml/registry.py` | Model card publish/import with the R2 guard |
 | `spec/` | The two open schemas |
 | `api/residents.py` | The resident page's words: plain-language why, CPCB health meanings, batched translation |

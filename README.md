@@ -77,6 +77,7 @@ We tested it properly, and it does not hold on this data:
 | Satellite AOD explains where interpolation is wrong | **No.** r = +0.04 |
 | The model earns its place where stations are sparse | **No.** It loses *worse* as the network thins |
 | 72-hour forecaster beats diurnal persistence | **No.** Loses at every horizon (-5.5% to -59.9%) |
+| Day-ahead Severe-night warning beats the calendar | **No.** "Warn after 6 November" scores +0.71; the best weather rule, +0.61 |
 | **Upwind fires + boundary layer explain the episodes** | **Yes.** r = **+0.55** and **-0.42** |
 
 Full evidence, including the numbers that killed each hypothesis, is in
@@ -202,6 +203,7 @@ No API keys? The model harness runs standalone on placeholder data:
 ```bash
 python -m ml.evaluate            # leave-one-station-out CV against a real IDW baseline
 python -m ml.evaluate_forecast   # per-horizon vs persistence and climatology
+python -m ml.evaluate_warning    # day-ahead Severe-night warning vs calendar and persistence
 ```
 
 ## Repository
@@ -220,9 +222,14 @@ python -m ml.evaluate_forecast   # per-horizon vs persistence and climatology
 Stated plainly, because a system that briefs public authorities should be honest
 about what it does not know.
 
-**Neither ML model is in the product.** Gridded estimation loses to interpolation;
-forecasting loses to diurnal persistence. Both harnesses remain in the repository so
-the result is reproducible, but no residual map and no forecast is served.
+**Neither ML model is in the product, and neither is a forecast.** Gridded estimation
+loses to interpolation; 72-hour forecasting loses to diurnal persistence; and a
+day-ahead "will tonight be Severe?" warning loses to the calendar — over 26 consecutive
+nights of one seasonal ramp, "warn after 6 November" beats every weather rule we can
+build from genuine 24-hour-lead forecasts, and the edge over persistence has a bootstrap
+90% CI of −0.16 to +0.56. All three harnesses remain in the repository so the results
+are reproducible, but no residual map, no forecast and no predictive warning is served.
+Alerts fire on observed conditions instead.
 
 **Hotspots are hidden by the average, not hidden from the monitoring network.** The
 detector compares monitors against monitors, so it can only flag a locality that already
