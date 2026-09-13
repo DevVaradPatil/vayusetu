@@ -80,6 +80,6 @@ Record from the live URL, not localhost. **Say the replay out loud** (checklist 
 6. **Where** — the Bahadurgarh event: 918 vs 207; robust z; 251 events across 48 localities.
 7. **Who, and did they act** — alerts from observations, mock inbox, audit trail.
 8. **Residents** — ten languages, speech, photo triage that cannot set a value.
-9. **We tested our own ideas** — the falsification table (four "No", one "Yes"). The proof of rigour, not an apology.
+9. **We tested our own ideas** — the falsification table (five "No", one "Yes"). The proof of rigour, not an apology.
 10. **Deployable and scalable** — one Cloud Run service, BigQuery per-tenant datasets, open schemas, `infra/deploy.sh`; what a new city needs.
 11. **Limits and next** — hotspots only where monitors exist; forecast BLH and 3+ seasons needed for a warning; identity in front of alerts; Lucknow ingestion.
