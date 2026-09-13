@@ -166,6 +166,17 @@ def registry_import(
         raise HTTPException(status_code=422, detail=str(e))
 
 
+# The website, when it has been built. One Cloud Run service serves both, so the
+# deployed site has one URL and no cross-origin API. Mounted last: routes registered
+# above always win, so a file in web/dist can never shadow an endpoint. Locally the
+# Vite dev server serves the site instead and this directory does not exist.
+_WEB_DIST = Path(__file__).parent.parent / "web" / "dist"
+if _WEB_DIST.is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=_WEB_DIST, html=True), name="web")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

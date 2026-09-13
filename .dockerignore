@@ -1,0 +1,18 @@
+# Secrets never enter the image.
+.env
+.env.*
+*-service-account*.json
+*credentials*.json
+*.pem
+*.key
+
+.git
+**/__pycache__
+**/node_modules
+.venv
+venv
+.claude
+docs
+ml/artifacts
+web/src
+web/public

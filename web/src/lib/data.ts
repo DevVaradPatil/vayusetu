@@ -6,7 +6,16 @@
  * in the resident view: one definition, every consumer.
  */
 
-export const API = (import.meta as any).env?.VITE_API_BASE ?? 'http://localhost:8080';
+/**
+ * Where the API is. A production build is served by the API itself (one Cloud Run
+ * service), so it calls its own origin. The dev server runs separately on another
+ * port, so development points at the local API. Keyed on the build mode rather than
+ * on VITE_API_BASE because web/.env.local — which sets it to localhost for dev — is
+ * also loaded by production builds, and a deployed site calling localhost fails for
+ * every visitor while working on the machine that built it.
+ */
+const env = (import.meta as any).env ?? {};
+export const API: string = env.PROD ? '' : (env.VITE_API_BASE ?? 'http://localhost:8080');
 export const MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY ?? '';
 export const TENANT = 'ncr';
 

@@ -1,0 +1,14 @@
+# What the deployed service imports, and nothing else. requirements.txt also carries
+# the model harness, Earth Engine and Vertex AI, which the API never loads; installing
+# them would triple the image for no runtime use.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+python-multipart>=0.0.9
+Pillow>=10.2
+PyYAML>=6.0
+jsonschema>=4.21
+google-cloud-bigquery>=3.19
+google-genai>=1.0
+google-cloud-translate>=3.15
+google-cloud-texttospeech>=2.16
