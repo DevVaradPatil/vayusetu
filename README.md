@@ -222,6 +222,8 @@ python -m ml.evaluate_warning    # day-ahead Severe-night warning vs calendar an
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | Entry point for contributors and AI agents; the seven project rules |
 | [`TODO.md`](TODO.md) | The findings, including every falsified hypothesis and its evidence |
+| [`docs/SUBMISSION.md`](docs/SUBMISSION.md) | Submission text, track-coverage mapping, video script, deck outline |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | What is deployed, how to redeploy, what broke on the way |
 | [`plan.md`](plan.md) | Original design rationale, with the superseded sections marked |
 | [`docs/DATA_CONTRACTS.md`](docs/DATA_CONTRACTS.md) | Frozen interfaces; §7a records measured API reality |
 | [`spec/`](spec/) | The open schemas |
