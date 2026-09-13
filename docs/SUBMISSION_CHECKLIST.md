@@ -8,7 +8,7 @@ Walk this end to end before submitting. Every line is either a hard requirement 
 - [ ] **Demo video** — 3–5 minutes, working end-to-end walkthrough. Not a slideshow.
 - [ ] **Pitch deck** — 10–12 slides covering: problem, solution, AI approach, who it serves, why it is deployable, how it scales across India.
 - [ ] **Brief description** — 2–3 lines.
-- [ ] **Deployed link** — live and working. **Test it from outside our network, on mobile data, in an incognito window.**
+- [x] **Deployed link** — https://vayusetu-999960875509.asia-south1.run.app (verified 2026-09-13 from the deploy machine: site, hotspots, alerts, Gemini brief, Hindi translation and speech). Still to do by hand: **Test it from outside our network, on mobile data, in an incognito window.**
 
 ## Mandatory build requirements
 
@@ -24,7 +24,7 @@ Walk this end to end before submitting. Every line is either a hard requirement 
 - [ ] `min-instances=1` set on both Cloud Run services for demo week
 - [ ] Works in Chrome, Safari, and on a real Android phone
 - [ ] Citizen PWA camera flow works on an actual phone, on mobile data
-- [ ] No console errors on load
+- [x] No console errors on load (checked on the deployed origin)
 - [ ] Maps key referrer restriction includes the deployed origin
 - [ ] Anonymous auth works — a judge must not hit a signup wall
 - [ ] Demo data is present and current; `verify_data.py --strict` passes on both tenants

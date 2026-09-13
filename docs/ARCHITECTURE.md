@@ -4,7 +4,7 @@ A complete technical walkthrough: what the system does, what data it uses, what
 every component computes, and what we measured. Written to be read start to finish
 by someone who has not seen the code.
 
-**Last updated:** 2026-09-10
+**Last updated:** 2026-09-13
 
 ---
 
@@ -666,6 +666,18 @@ python -m ml.evaluate_forecast # per-horizon vs persistence and climatology
 
 ---
 
+### Deployed
+
+**https://vayusetu-999960875509.asia-south1.run.app** — one Cloud Run service in `asia-south1` serving the API and the built
+site from `web/dist`. Redeploy with `bash infra/deploy.sh`, which builds, deploys and
+then smoke-tests the deployment itself. The Gemini key is in Secret Manager; BigQuery,
+Translation and Text-to-Speech use the runtime service account. Full setup and the four
+things that broke on the way (a missing `.gcloudignore`, a localhost API base baked into
+the bundle, a service worker that would have cached API responses on a shared origin,
+and Cloud Run swallowing `/healthz`) are in `docs/DEPLOYMENT.md`.
+
+---
+
 ## 11. File map
 
 | Path | What lives there |
@@ -676,7 +688,8 @@ python -m ml.evaluate_forecast # per-horizon vs persistence and climatology
 | `api/gemini/brief.py` | Prompt, response schema, and the R5 verifier |
 | `api/gemini/advisory.py` | Translation into ten languages |
 | `api/routes_episode.py` | The product's endpoints, caching and generation lock |
-| `api/main.py` | App composition, CORS, `.env` loading |
+| `api/main.py` | App composition, CORS, `.env` loading, serving the built site |
+| `Dockerfile`, `.gcloudignore`, `requirements-api.txt`, `infra/deploy.sh` | The Cloud Run deployment |
 | `ingestion/` | OpenAQ, FIRMS, Open-Meteo, Earth Engine → BigQuery, all idempotent MERGE upserts |
 | `ml/evaluate.py`, `ml/forecast_real.py`, `ml/evaluate_warning.py` | The falsified models and the falsified warning, kept reproducible |
 | `ml/registry.py` | Model card publish/import with the R2 guard |
@@ -719,3 +732,8 @@ about what it does not know.
   degradation figure is only real once Lucknow's own stations are ingested. Until then
   the API returns `transfer_measured: false` rather than an estimate.
 - **The live view is thin** — 7 stations — because the upstream feed is stalled.
+- **The public demo's quotas are public.** Anyone can spend Gemini calls (500/day) by
+  opening uncached hours, and anyone can act in the shared mock alert inbox. Without
+  Gemini the site still shows measurements, hotspots, alerts, translation and speech,
+  and says the explanation is unavailable. Production would put alert actions behind
+  identity.

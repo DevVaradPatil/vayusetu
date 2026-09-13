@@ -25,7 +25,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  if (url.pathname.startsWith('/api/') || url.pathname === '/healthz') return;
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/health')) return;
 
   // Network first, so a new deploy is picked up at once; the cache answers only offline.
   event.respondWith(

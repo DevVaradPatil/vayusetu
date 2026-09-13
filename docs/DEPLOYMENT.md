@@ -1,10 +1,122 @@
-# VayuSetu — City Onboarding Runbook
+# VayuSetu — Deployment
 
-**Version 1.0 | Apache-2.0 | Maintained by the VayuSetu team**
+**Live:** https://vayusetu-999960875509.asia-south1.run.app
 
-This runbook answers the question on every pilot decision-maker's mind: *"Could this be deployed inside a state pollution control board in weeks?"* The answer is yes — this document is the proof.
+This document has two halves. **Part A** is what is actually running today, and how to
+redeploy it in one command. **Part B** is the runbook for onboarding a further city,
+kept because the multi-tenant design is real — but read its status note first.
 
 ---
+
+## Part A — The deployed demo
+
+### What is running
+
+One Cloud Run service, `vayusetu`, in `asia-south1`, serving both the API and the
+website:
+
+| Piece | Where |
+|---|---|
+| API (FastAPI) | `/api/v1/...`, `/health` |
+| Website (built React bundle) | `/` — served by the API from `web/dist`, mounted after every route |
+| Data | BigQuery `vayusetu_ncr` and `vayusetu_shared` |
+| Gemini key | Secret Manager, `gemini-api-key`, mounted as `GEMINI_API_KEY` |
+| Translation, Text-to-Speech, BigQuery access | The runtime service account (ADC), no key file |
+
+One service rather than two, because it gives one URL, no CORS, and one deploy. The
+cost is a coupling that has to be handled deliberately — see "Things that bite" below.
+
+Settings: public (`--allow-unauthenticated`, required for a judged live link),
+`--max-instances 2`, `--memory 1Gi`, scale to zero when idle. A cold request takes a
+few seconds; the first hour a visitor opens also waits ~10 s for Gemini, after which
+that hour is cached in the instance.
+
+### Redeploy
+
+```bash
+bash infra/deploy.sh
+```
+
+It builds the site, uploads source, builds the image with Cloud Build, deploys, and then
+smoke-tests **the deployment** — `/health`, the site, a BigQuery-backed endpoint — and
+fails if `/.env` is reachable.
+
+### One-time setup (already done for `vayusetu-507904`)
+
+```bash
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+
+# The key is piped from .env, never typed or echoed.
+sed -n 's/^GEMINI_API_KEY=//p' .env | tr -d '\r\n' | gcloud secrets create gemini-api-key --data-file=- --replication-policy=automatic
+
+gcloud secrets add-iam-policy-binding gemini-api-key --member="serviceAccount:<PROJECT_NUMBER>-compute@developer.gserviceaccount.com" --role=roles/secretmanager.secretAccessor
+```
+
+The default compute service account has `roles/editor`, which covers BigQuery jobs and
+data, Cloud Translation and Text-to-Speech. For anything beyond a demo, replace it with a
+dedicated account holding `bigquery.jobUser`, `bigquery.dataEditor` on the tenant
+datasets, `cloudtranslate.user` and the secret accessor — nothing else.
+
+### Things that bite (each one did)
+
+**`.gcloudignore` must exist.** Without it, `gcloud run deploy --source` falls back to
+`.gitignore`, which excludes `web/dist` — the site this service serves. The first build
+failed on exactly that. The file states the upload rules explicitly and keeps every
+secret out. Verify with:
+
+```bash
+gcloud meta list-files-for-upload . | grep -iE "(^|/)\.env|credential|\.pem$|\.key$"
+```
+
+It should print nothing. Separately, the `Dockerfile` copies only `api/`, `ingestion/`,
+`ml/`, `spec/`, `infra/tenants.yaml` and `web/dist/`, so nothing else uploaded reaches the
+image.
+
+**The site must call its own origin.** `web/.env.local` sets `VITE_API_BASE` to
+localhost for development, and Vite loads that file for production builds too. A build
+that honoured it would work on the machine that built it and fail for every visitor.
+`web/src/lib/data.ts` therefore keys on the build mode: production calls `''`.
+
+**The service worker must skip the API by path.** On a shared origin it would otherwise
+cache `/api/` responses and show stale air readings offline. `web/public/sw.js` excludes
+`/api/` and `/health*`.
+
+**`/healthz` returns 404 on Cloud Run.** Google's front end reserves it and never
+forwards it to the container. Use `/health`; `/healthz` remains for local use.
+
+**The Maps key is compiled into the bundle.** It is a browser key and is visible to
+anyone who opens the page. It must carry an HTTP-referrer restriction that includes
+`https://vayusetu-999960875509.asia-south1.run.app/*` and
+`https://vayusetu-ucleby347q-el.a.run.app/*` (Cloud Run answers on both), plus
+`http://localhost:3000/*` for development, and an API restriction to the Maps
+JavaScript API.
+
+### Known exposure of a public demo
+
+Every endpoint is unauthenticated, which a judged live link requires. Two consequences:
+
+- **Gemini quota can be spent by anyone.** Each uncached hour opened costs one call
+  against a 500-per-day limit, and the window has 648 hours. Photo triage costs one call
+  per upload. `--max-instances 2` caps cost, not calls. If the quota is exhausted the
+  site says the explanation is unavailable rather than inventing one — measurements,
+  hotspots, alerts, translation and speech keep working, because none of them use Gemini.
+- **Anyone can raise, acknowledge or resolve alerts in the mock inbox.** The recipients
+  are demo accounts with no contact details (AGENTS.md R6), so nobody can be notified —
+  but the inbox state is shared by every visitor. A production deployment puts these
+  routes behind identity (IAP or Firebase Auth) and records a real, authorised actor.
+
+---
+
+## Part B — Onboarding a further city
+
+> **Status.** This runbook predates the findings in `TODO.md`. The tenant architecture,
+> datasets and ingestion it describes are real and ran for NCR. **Model onboarding
+> (Step 5) and the inference and forecast schedulers (Step 7) are not**: the gridded
+> estimator lost to interpolation, the forecaster lost to diurnal persistence, and the
+> registry refuses both, so there is no model to import and no inference job to run. A
+> new city today gets ingestion, evidence, attribution briefs, hotspot detection and
+> alerts — everything in Part A — by adding a tenant and backfilling its data. Lucknow
+> (`vayusetu_lko`) has been provisioned but not ingested.
 
 ## Overview
 
@@ -190,20 +302,14 @@ python -m ml.evaluate --tenant lko
 
 ---
 
-## Step 6: Deploy API and Frontend
+## Step 6: Deploy
+
+The service is shared across tenants: a city is a dataset and an entry in
+`infra/tenants.yaml`, not a separate deployment. After adding the tenant, redeploy so the
+new `tenants.yaml` ships (Part A):
 
 ```bash
-# Build API Docker image and deploy to Cloud Run
-gcloud builds submit --config cloudbuild.api.yaml
-
-# Build frontend
-npm --prefix web run build
-
-# Deploy frontend to Cloud Run (or Firebase Hosting)
-gcloud run deploy vayusetu-web-lko \
-  --source web/dist \
-  --region asia-south1 \
-  --allow-unauthenticated
+bash infra/deploy.sh
 ```
 
 ---
@@ -221,8 +327,8 @@ This registers the following jobs:
 | `ingest-stations-lko` | `0 * * * *` | Hourly OpenAQ fetch |
 | `ingest-fires-lko` | `30 5 * * *` | Daily FIRMS fire update |
 | `ingest-meteo-lko` | `0 */3 * * *` | 3-hourly meteorology |
-| `run-inference-lko` | `45 * * * *` | Hourly grid predictions |
-| `run-forecast-lko` | `0 6,18 * * *` | Twice-daily 72h forecast |
+| ~~`run-inference-lko`~~ | — | **Not deployed.** No grid model passed the registry guard |
+| ~~`run-forecast-lko`~~ | — | **Not deployed.** Forecasting lost to diurnal persistence; the day-ahead warning lost to the calendar |
 
 ---
 

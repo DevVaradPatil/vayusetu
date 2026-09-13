@@ -1,0 +1,30 @@
+# What `gcloud run deploy --source .` uploads. Without this file gcloud falls back to
+# .gitignore, which excludes web/dist — the built site this service serves. So the
+# upload rules are stated here, and they must keep every secret out, like .dockerignore.
+.gcloudignore
+.git
+.gitignore
+
+.env
+.env.*
+*-service-account*.json
+*credentials*.json
+*.pem
+*.key
+gcloud-key*.json
+
+**/__pycache__
+**/node_modules
+.venv
+venv
+.claude
+docs
+ml/artifacts
+web/src
+web/public
+
+# Local run output and scratch files have no business leaving the machine.
+*.log
+adv.json
+data
+experiments

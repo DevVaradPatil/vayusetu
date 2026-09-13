@@ -70,7 +70,11 @@ def load_tenant_config() -> dict:
         return yaml.safe_load(f)
 
 
-@app.get("/healthz", summary="Liveness check")
+# Two paths because Google's front end reserves /healthz on Cloud Run and answers it
+# with its own 404 before the request reaches this container. /healthz still works
+# locally and behind other hosts; /health is the one that works on the deployment.
+@app.get("/health", summary="Liveness check")
+@app.get("/healthz", summary="Liveness check", include_in_schema=False)
 def healthz():
     return {"status": "ok", "service": "vayusetu-api", "timestamp": datetime.now(timezone.utc).isoformat()}
 

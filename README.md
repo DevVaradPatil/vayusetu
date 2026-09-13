@@ -4,6 +4,8 @@
 
 Submission for *Build with AI: Code for Communities — Track 02, Clean Air & Climate Resilience.*
 
+**Live:** https://vayusetu-999960875509.asia-south1.run.app · officials view at `/`, residents at `/#/residents`
+
 ---
 
 ## The idea
@@ -199,6 +201,13 @@ npm install
 npm run dev                    # http://localhost:3000
 ```
 
+Deploy (one Cloud Run service serving the API and the site; setup and pitfalls in
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)):
+
+```bash
+bash infra/deploy.sh
+```
+
 No API keys? The model harness runs standalone on placeholder data:
 
 ```bash
@@ -270,6 +279,12 @@ photographs has not yet been tested against a labelled set.
 **Citizen photos are corroborating evidence only.** They raise a cell's confidence
 score. They never set a PM2.5 value and never trigger an alert on their own —
 untrusted input must not be able to dispatch a government response.
+
+**The live demo is public, so its quotas are too.** Every uncached hour opened costs a
+Gemini call against a 500-per-day limit, and anyone can act in the shared mock alert
+inbox. When the quota runs out the site says the explanation is unavailable; hotspots,
+alerts, translation and speech keep working because none of them use Gemini. A real
+deployment puts alert actions behind identity.
 
 **Alerts go to mock accounts, and fire on observations only.** A recipient has a role
 key and a display name and no address field of any kind — no email, no phone, no
