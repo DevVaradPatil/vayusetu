@@ -61,12 +61,13 @@ export const EXPLAIN = {
     'severe smog. The first three mean the instrument is faulty, and its readings are left ' +
     'out. The last is only a reason to inspect the site — a monitor can genuinely sit in a ' +
     'cleaner pocket. Thresholds were set from 35,602 real readings, not guessed.',
-  alerts:
-    'An alert is raised from what the monitors actually read this hour — a locality far ' +
-    'above its neighbours, or the whole region in the Severe band. Never from a forecast: ' +
-    'we tested a day-ahead warning and it was no better than a calendar, so we do not ' +
-    'ship one. Every recipient here is a demo account; no real official can be contacted ' +
-    'from this system.',
+  cases:
+    'A case is raised only from trusted measurements: a confirmed local event, a broken or dark ' +
+    'monitor, or the whole region in the Severe band. Each goes to the agency responsible, read ' +
+    'from the monitor itself, with a deadline, and escalates to CAQM when overdue. To close it, ' +
+    'the agency uploads a site photo; Gemini checks it is a real photo with no source still ' +
+    'visible, and the readings afterwards must show the problem gone. If the numbers still show ' +
+    'it, the closure is refused, however good the photo. Every agency here is a demo account.',
   hotspot:
     'One monitor reading far above the monitors around it in the same hour — a local source ' +
     'such as burning waste or a stalled traffic corridor, rather than a bad day everywhere. ' +

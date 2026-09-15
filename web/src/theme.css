@@ -588,7 +588,63 @@ button { font: inherit; color: inherit; }
 .hs-excluded { margin-top: 14px; padding: 12px 14px; border-radius: var(--r-small); background: var(--surface-container); font-size: 14px; line-height: 1.55; }
 .hs-excluded strong { color: var(--on-surface); }
 
-/* ── Alert inbox ──────────────────────────────────────────────────────────── */
+/* ── Case desk ────────────────────────────────────────────────────────────── */
+
+.case-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; margin-top: 14px; }
+.case-kpi { display: grid; gap: 2px; padding: 10px 12px; border-radius: var(--r-small); background: var(--surface-container); }
+.case-kpi-value { font-size: 26px; font-weight: 500; line-height: 1.1; }
+.case-kpi-label { font-size: 13px; color: var(--on-surface-variant); }
+.case-kpi--bad { background: var(--error-container); color: var(--on-error-container); }
+.case-kpi--bad .case-kpi-label, .case-kpi--warn .case-kpi-label, .case-kpi--good .case-kpi-label { color: inherit; }
+.case-kpi--warn { background: var(--flag-bg); color: var(--flag-fg); }
+.case-kpi--good { background: var(--success-container); color: var(--on-success-container); }
+
+.case-list { display: grid; gap: 10px; margin-top: 12px; padding: 0; list-style: none; }
+.case-item {
+  display: grid; gap: 6px; min-width: 0; padding: 12px 14px;
+  border: 1px solid var(--outline-variant); border-radius: var(--r-small);
+  background: var(--surface-container-lowest); border-left-width: 4px;
+}
+.case-item--emergency, .case-item--overdue { border-left-color: var(--error); }
+.case-item--warning { border-left-color: var(--flag-fg); }
+.case-item--closed { opacity: 0.85; border-left-color: var(--outline); }
+.case-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.case-kind { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; color: var(--on-surface-variant); }
+.case-status {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 3px 9px;
+  border-radius: var(--r-pill); background: var(--surface-container); font-size: 12.5px; font-weight: 600;
+}
+.case-status--bad { background: var(--error-container); color: var(--on-error-container); }
+.case-status--warn { background: var(--flag-bg); color: var(--flag-fg); }
+.case-status--good { background: var(--success-container); color: var(--on-success-container); }
+.case-title { font-size: 15.5px; font-weight: 600; line-height: 1.4; }
+.case-detail { font-size: 14px; color: var(--on-surface-variant); line-height: 1.5; }
+.case-rejected { display: flex; align-items: baseline; gap: 6px; font-size: 13.5px; color: var(--error); }
+.case-log summary { cursor: pointer; font-size: 13px; color: var(--on-surface-variant); }
+.case-log ol { display: grid; gap: 4px; margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--on-surface-variant); }
+
+.case-close { display: grid; gap: 10px; padding: 12px; border-radius: var(--r-small); background: var(--surface-container); }
+.case-field { display: grid; gap: 4px; font-size: 13.5px; color: var(--on-surface-variant); }
+.case-field textarea, .case-field input[type="file"] {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--outline-variant); border-radius: var(--r-small);
+  background: var(--surface-container-lowest); color: var(--on-surface); font: inherit;
+}
+.case-loc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.case-demo { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--on-surface-variant); }
+
+.case-verdict { display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--r-small); }
+.case-verdict ul { margin: 0; padding-left: 18px; font-size: 14px; }
+.case-verdict-head { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.case-verdict--good { background: var(--success-container); color: var(--on-success-container); }
+.case-verdict--warn { background: var(--flag-bg); color: var(--flag-fg); }
+.case-verdict--bad { background: var(--error-container); color: var(--on-error-container); }
+.case-verdict .al-meta, .case-verdict .mon-ev-label { color: inherit; opacity: 0.85; }
+.case-outcome { display: grid; gap: 4px; }
+.case-spark { display: flex; align-items: flex-end; gap: 2px; height: 40px; }
+.case-bar { flex: 1; min-width: 3px; border-radius: 2px 2px 0 0; background: currentColor; opacity: 0.45; }
+.case-bar--bad { opacity: 1; }
+
+/* ── Shared action bar (used by the case desk) ────────────────────────────── */
 
 .al-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 14px;

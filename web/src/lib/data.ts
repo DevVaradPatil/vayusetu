@@ -192,35 +192,77 @@ export interface HotspotHour {
   field: Hotspot[];
 }
 
+export type CaseKind = 'local_event' | 'monitor_fault' | 'regional_episode';
+export type CaseStatus = 'open' | 'in_progress' | 'closed_verified' | 'closed_unverified';
+
+/** One stretch of what the measurements showed after the event, used to verify closure. */
+export interface OutcomeHour {
+  at: string;
+  value?: number | null;
+  regional_median?: number | null;
+  trusted?: boolean;
+  elevated?: boolean;
+  faults?: string[];
+}
+
+export interface ClosureResult {
+  result: 'closed_verified' | 'closed_unverified' | 'rejected';
+  reasons: string[];
+  outcome: 'resolved' | 'persisting' | 'unknown';
+  outcome_summary: string;
+  outcome_hours: OutcomeHour[];
+  outcome_basis: string;
+  photo: {
+    is_genuine_site_photo: boolean;
+    rejection_reason: string | null;
+    active_sources_visible: string[];
+    remediation_visible: string[];
+    shows_monitoring_equipment: boolean;
+    notes: string;
+  } | null;
+  upload_distance_km: number | null;
+  location_source: 'device' | 'demo_case_location';
+}
+
 /**
- * One alert in the mock inbox.
- *
- * `recipients` are display names of demo accounts. There is no contact detail in the
- * system to show — by design (AGENTS.md R6), no address of any kind exists.
+ * Work for a named agency, with a deadline, that closes only when a photo and the
+ * measurements both check out (api/cases.py). Agencies are demo accounts (R6).
  */
-export interface Alert {
-  alert_id: string;
-  trigger_kind: 'hyper_local_event' | 'regional_episode';
-  severity: 'watch' | 'warning' | 'emergency';
-  state: 'open' | 'acknowledged' | 'resolved';
-  headline: string;
+export interface Case {
+  case_id: string;
+  kind: CaseKind;
+  status: CaseStatus;
+  severity: string;
+  title: string;
+  detail: string;
+  station_id: string | null;
   location_name: string;
   lat: number | null;
   lon: number | null;
-  observed_pm25: number | null;
-  population_exposed: number | null;
-  recipients: string[];
-  evidence: Record<string, unknown> | null;
-  issued_at: string | null;
-  ts_hour: string | null;
-  acknowledged_by: string | null;
-  resolved_by: string | null;
+  event_hour: string;
+  owner: string;
+  copied: string[];
+  escalates_to: string;
+  opened_at: string;
+  due_at: string;
+  closure: ClosureResult | null;
+  closed_at: string | null;
+  events: { at: string; actor: string | null; action: string; note: string }[];
+  closed: boolean;
+  overdue: boolean;
+  hours_left: number;
+  escalated: boolean;
 }
 
-/** What an hour would raise, without raising it. */
-export interface AlertPreview {
+export interface CaseQueue {
+  summary: { open: number; overdue: number; closed_verified: number; closed_unverified: number; closure_rejections: number };
+  actors: Record<string, string>;
+  cases: Case[];
+}
+
+export interface CasePreview {
   ts: string;
-  candidates: { trigger_kind: string; severity: string; headline: string; recipients: string[] }[];
+  candidates: { kind: CaseKind; severity: string; title: string; owner: string }[];
   no_trigger_reason: string | null;
 }
 
@@ -294,32 +336,29 @@ export const fetchTopEvents = (limit = 8) =>
 export const fetchMonitorHealth = (ts: string, days = 7) =>
   get<NetworkHealth>(`/api/v1/${TENANT}/monitors/health?${q(ts)}&days=${days}`);
 
-/** The demo accounts alerts are dispatched to. No real official is reachable from here. */
-export const ACTORS: { key: string; label: string }[] = [
-  { key: 'mock_district_officer', label: 'Demo: District Environment Officer' },
-  { key: 'mock_pollution_board', label: 'Demo: State Pollution Control Board' },
-  { key: 'mock_municipal', label: 'Demo: Municipal Corporation' },
-  { key: 'mock_traffic_police', label: 'Demo: Traffic Police Control Room' },
-];
+export const fetchCases = () => get<CaseQueue>(`/api/v1/${TENANT}/cases`);
 
-export const fetchAlerts = () =>
-  get<{ alerts: Alert[] }>(`/api/v1/${TENANT}/alerts`).then(d => d.alerts ?? []);
+export const previewCases = (ts: string) => get<CasePreview>(`/api/v1/${TENANT}/cases/preview?${q(ts)}`);
 
-export const previewAlerts = (ts: string) =>
-  get<AlertPreview>(`/api/v1/${TENANT}/alerts/preview?${q(ts)}`);
-
-const post = async <T>(path: string): Promise<T> => {
-  const r = await fetch(`${API}${path}`, { method: 'POST' });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText} on ${path}`);
+const post = async <T>(path: string, body?: FormData): Promise<T> => {
+  const r = await fetch(`${API}${path}`, { method: 'POST', body });
+  if (!r.ok) {
+    let detail = r.statusText;
+    try { detail = (await r.json()).detail ?? detail; } catch { /* not JSON */ }
+    throw new Error(`${r.status}: ${detail}`);
+  }
   return r.json();
 };
 
-/** Raising alerts is a deliberate POST, never something a page load can do. */
-export const dispatchAlerts = (ts: string) =>
-  post<{ dispatched: number }>(`/api/v1/${TENANT}/alerts/dispatch?${q(ts)}`);
+/** Opening cases is a deliberate POST, never something a page load can do. */
+export const raiseCases = (ts: string) => post<{ opened: number }>(`/api/v1/${TENANT}/cases/raise?${q(ts)}`);
 
-export const actOnAlert = (id: string, action: 'acknowledge' | 'resolve', actor: string) =>
-  post<{ by: string }>(`/api/v1/${TENANT}/alerts/${id}/${action}?actor=${encodeURIComponent(actor)}`);
+export const acknowledgeCase = (id: string, actor: string, note = '') =>
+  post<{ status: string }>(`/api/v1/${TENANT}/cases/${id}/acknowledge?actor=${encodeURIComponent(actor)}&note=${encodeURIComponent(note)}`);
+
+/** A refused closure is a normal 200 with result 'rejected' and the reasons. */
+export const closeCase = (id: string, form: FormData) =>
+  post<ClosureResult & { status: string }>(`/api/v1/${TENANT}/cases/${id}/close`, form);
 
 export const fetchAdvisory = (ts: string, lang: string, audio = false) =>
   get<{ text: string; lang: string; translated: boolean; audio_base64?: string | null }>(

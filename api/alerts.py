@@ -1,62 +1,36 @@
 """
-api/alerts.py — alerts on what is measured, dispatched to mock accounts only.
+api/alerts.py — what the measurements justify raising, for one hour. Writes nothing.
 
-The track asks us to "alert authorities for rapid intervention". Two design decisions
-shape everything here, and both are consequences of things we measured.
+The track asks us to "alert authorities for rapid intervention". This module decides
+*whether* an hour justifies it; `api/cases.py` turns that into work with an owner, a
+deadline and verified closure. (It used to keep its own alert inbox too. Cases replaced
+it: an alert nobody owns and nobody has to prove was dealt with is the Green Delhi
+failure mode.)
 
-**Alerts fire on observed conditions, never on a prediction.** A day-ahead warning was
-built and falsified (TODO.md 2026-09-12b): over 26 nights, "warn after 6 November" beat
-every weather rule we could build from genuine 24-hour-lead forecasts. An official who
-evacuates a school district on a warning we cannot demonstrate — or who stops trusting
-the system after two false alarms — is worse off than with no warning. So a trigger is
-always a thing that is happening: a Severe hour now, or a locality running far above its
-neighbours now.
+**Triggers are observed conditions, never a prediction.** A day-ahead warning was built
+and falsified (TODO.md 2026-09-12b): over 26 nights, "warn after 6 November" beat every
+weather rule we could build from genuine 24-hour-lead forecasts.
 
-**The previous engine keyed severity off `residual`** — model estimate minus
-interpolation — which is the quantity the project falsified first. It was deleted rather
-than ported. Severity here comes from the observed concentration, how far above its
-surroundings a locality is, and how many people live there.
+**Severity never comes from `residual`**, the quantity this project falsified first. It
+comes from the observed concentration, how far a locality stands above its surroundings,
+and whether the reading is trusted.
 
-Two triggers, both measurement:
-
-- `hyper_local_event` — a monitor flagged by `api/hotspots.py`: far above the robust
-  median of the monitors around it, in the same hour. Actionable at one address.
-- `regional_episode` — the city-wide mean in the CPCB Severe band. No single address to
-  send anyone to; this is a region-wide response.
-
-**R6: recipients are mock accounts inside this app.** There is deliberately no address
-field of any kind — no email, no phone, no webhook — so there is no string in this
-codebase that could be pasted into a mailer or mistaken for a real contact. A recipient
-is a role key and a display name, and dispatch means "it appears in the in-app inbox".
+- `hyper_local_event` — a *confirmed* event from `api/hotspots.py`: a trusted reading far
+  above the robust median of the monitors around it, for at least two hours.
+- `regional_episode` — the regional median in the CPCB Severe band.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import os
-from datetime import datetime, timezone
+
 from typing import Any, Dict, List, Optional
 
 from api import hotspots as hotspots_mod
 
 logger = logging.getLogger("vayusetu.api.alerts")
-
-# R6. Role keys and display names only — no contact details, by construction.
-MOCK_RECIPIENTS: Dict[str, str] = {
-    "mock_district_officer": "Demo: District Environment Officer",
-    "mock_pollution_board": "Demo: State Pollution Control Board",
-    "mock_municipal": "Demo: Municipal Corporation",
-    "mock_traffic_police": "Demo: Traffic Police Control Room",
-}
-
-# Who sees which trigger. A local plume is an enforcement visit to one address, so it
-# goes to the people who can make that visit; a regional blanket is a policy measure.
-ROUTING: Dict[str, List[str]] = {
-    "hyper_local_event": ["mock_district_officer", "mock_municipal"],
-    "regional_episode": ["mock_pollution_board", "mock_district_officer", "mock_traffic_police"],
-}
 
 # CPCB Severe for PM2.5. Below this a "rapid intervention" alert is not warranted:
 # Very Poor days are most of a Delhi winter, and an alert that fires every day is
@@ -114,6 +88,8 @@ def evaluate(ts_str: str, tenant: str = "ncr",
             "severity": sev,
             "ts_hour": hour,
             "location_name": where,
+            "station_id": h["station_id"],
+            "monitor_name": h["name"],
             "lat": h["lat"],
             "lon": h["lon"],
             "cell_id": None,
@@ -123,7 +99,6 @@ def evaluate(ts_str: str, tenant: str = "ncr",
                 f"{where} is at {h['pm25']:.0f} ug/m3, "
                 f"{h['times_regional']} times the monitors around it"
             ),
-            "recipients": ROUTING["hyper_local_event"],
             # Measured numbers only. No Gemini call: an alert must not depend on a
             # rate-limited service, and everything here is already computed.
             "evidence": {
@@ -155,7 +130,6 @@ def evaluate(ts_str: str, tenant: str = "ncr",
                 f"Region-wide Severe air: {hs['n_reporting']} monitors at a median of "
                 f"{median:.0f} ug/m3"
             ),
-            "recipients": ROUTING["regional_episode"],
             "evidence": {
                 "regional_median": median,
                 "spread_mad": hs["spread_mad"],
@@ -189,179 +163,8 @@ def evaluate(ts_str: str, tenant: str = "ncr",
     return {"ts": ts_str, "tenant": tenant, "candidates": candidates, "no_trigger_reason": reason}
 
 
-def dispatch(ts_str: str, tenant: str = "ncr", project: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Evaluate one hour and record what fired, to the mock inbox.
-
-    MERGE on the deterministic id, so scanning the same hour twice is a no-op rather
-    than a duplicate, and an acknowledgement already made is never reset.
-    """
-    from google.cloud import bigquery
-
-    project = project or os.environ["GCP_PROJECT_ID"]
-    result = evaluate(ts_str, tenant, project)
-    if not result["candidates"]:
-        return {**result, "dispatched": 0, "recipients": MOCK_RECIPIENTS}
-
-    client = bigquery.Client(project=project)
-    table = f"{project}.vayusetu_{tenant}.alerts"
-
-    # DML rather than streaming inserts: rows written by the streaming API cannot be
-    # UPDATEd for up to 30 minutes, and acknowledging an alert seconds after it is
-    # raised is the normal case here.
-    for c in result["candidates"]:
-        client.query(
-            f"""
-            MERGE `{table}` T
-            USING (SELECT @alert_id AS alert_id) S
-            ON T.alert_id = S.alert_id
-            WHEN NOT MATCHED THEN INSERT (
-              alert_id, tenant, cell_id, city, alert_type, issued_at, severity,
-              population_exposed, attribution, recipients, trigger_kind, headline,
-              location_name, lat, lon, observed_pm25, ts_hour
-            ) VALUES (
-              @alert_id, @tenant, @cell_id, @city, @trigger_kind, CURRENT_TIMESTAMP(),
-              @severity, @population, PARSE_JSON(@evidence), @recipients, @trigger_kind,
-              @headline, @location_name, @lat, @lon, @observed_pm25, TIMESTAMP(@ts_hour)
-            )
-            """,
-            job_config=bigquery.QueryJobConfig(query_parameters=[
-                bigquery.ScalarQueryParameter("alert_id", "STRING", c["alert_id"]),
-                bigquery.ScalarQueryParameter("tenant", "STRING", c["tenant"]),
-                bigquery.ScalarQueryParameter("cell_id", "STRING", c["cell_id"]),
-                bigquery.ScalarQueryParameter("city", "STRING", c["location_name"]),
-                bigquery.ScalarQueryParameter("trigger_kind", "STRING", c["trigger_kind"]),
-                bigquery.ScalarQueryParameter("severity", "STRING", c["severity"]),
-                bigquery.ScalarQueryParameter("population", "INT64", c["population_exposed"]),
-                bigquery.ScalarQueryParameter("evidence", "STRING", json.dumps(c["evidence"])),
-                bigquery.ArrayQueryParameter("recipients", "STRING", c["recipients"]),
-                bigquery.ScalarQueryParameter("headline", "STRING", c["headline"]),
-                bigquery.ScalarQueryParameter("location_name", "STRING", c["location_name"]),
-                bigquery.ScalarQueryParameter("lat", "FLOAT64", c["lat"]),
-                bigquery.ScalarQueryParameter("lon", "FLOAT64", c["lon"]),
-                bigquery.ScalarQueryParameter("observed_pm25", "FLOAT64", c["observed_pm25"]),
-                bigquery.ScalarQueryParameter("ts_hour", "STRING", c["ts_hour"]),
-            ]),
-        ).result()
-
-    logger.info("dispatched %d alert(s) for %s to the mock inbox", len(result["candidates"]), ts_str)
-    return {**result, "dispatched": len(result["candidates"]), "recipients": MOCK_RECIPIENTS}
-
-
-def inbox(tenant: str = "ncr", status: Optional[str] = None, limit: int = 50,
-          project: Optional[str] = None) -> Dict[str, Any]:
-    """Every alert raised for this tenant, newest first."""
-    from google.cloud import bigquery
-
-    project = project or os.environ["GCP_PROJECT_ID"]
-    client = bigquery.Client(project=project)
-
-    where = {
-        "open": "AND acknowledged_at IS NULL AND resolved_at IS NULL",
-        "acknowledged": "AND acknowledged_at IS NOT NULL AND resolved_at IS NULL",
-        "resolved": "AND resolved_at IS NOT NULL",
-    }.get(status or "", "")
-
-    rows = list(client.query(
-        f"""
-        SELECT alert_id, trigger_kind, severity, headline, location_name, lat, lon,
-               observed_pm25, population_exposed, recipients, attribution,
-               issued_at, ts_hour, acknowledged_at, acknowledged_by,
-               resolved_at, resolved_by
-        FROM `{project}.vayusetu_{tenant}.alerts`
-        WHERE tenant = @tenant {where}
-        ORDER BY issued_at DESC, severity
-        LIMIT @limit
-        """,
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("tenant", "STRING", tenant),
-            bigquery.ScalarQueryParameter("limit", "INT64", limit),
-        ]),
-    ).result())
-
-    def state(r: Any) -> str:
-        if r.resolved_at:
-            return "resolved"
-        return "acknowledged" if r.acknowledged_at else "open"
-
-    return {
-        "tenant": tenant,
-        "recipients": MOCK_RECIPIENTS,
-        "alerts": [{
-            "alert_id": r.alert_id,
-            "trigger_kind": r.trigger_kind,
-            "severity": r.severity,
-            "state": state(r),
-            "headline": r.headline,
-            "location_name": r.location_name,
-            "lat": r.lat,
-            "lon": r.lon,
-            "observed_pm25": r.observed_pm25,
-            "population_exposed": r.population_exposed,
-            "recipients": [MOCK_RECIPIENTS.get(k, k) for k in (r.recipients or [])],
-            # A JSON column comes back already parsed; older clients hand back a string.
-            "evidence": (json.loads(r.attribution) if isinstance(r.attribution, str)
-                         else r.attribution),
-            "issued_at": r.issued_at.isoformat() if r.issued_at else None,
-            "ts_hour": r.ts_hour.isoformat() if r.ts_hour else None,
-            "acknowledged_at": r.acknowledged_at.isoformat() if r.acknowledged_at else None,
-            "acknowledged_by": r.acknowledged_by,
-            "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
-            "resolved_by": r.resolved_by,
-        } for r in rows],
-    }
-
-
-def set_state(alert_id: str, action: str, actor: str, tenant: str = "ncr",
-              project: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Acknowledge or resolve one alert.
-
-    `actor` must be a mock recipient key (R6): the audit trail records who acted, and
-    the only actors that exist in this system are the demo accounts.
-    """
-    from google.cloud import bigquery
-
-    if action not in ("acknowledge", "resolve"):
-        raise ValueError(f"unknown action {action!r}")
-    if actor not in MOCK_RECIPIENTS:
-        raise ValueError(f"unknown actor {actor!r}; alerts are dispatched to mock accounts only")
-
-    project = project or os.environ["GCP_PROJECT_ID"]
-    client = bigquery.Client(project=project)
-
-    # Acknowledging also stamps the acknowledgement when someone resolves an alert
-    # nobody had picked up: a resolved-but-never-acknowledged row is a gap in the trail.
-    if action == "acknowledge":
-        sets = "acknowledged_at = CURRENT_TIMESTAMP(), acknowledged_by = @actor"
-    else:
-        sets = ("resolved_at = CURRENT_TIMESTAMP(), resolved_by = @actor, "
-                "acknowledged_at = IFNULL(acknowledged_at, CURRENT_TIMESTAMP()), "
-                "acknowledged_by = IFNULL(acknowledged_by, @actor)")
-
-    job = client.query(
-        f"""
-        UPDATE `{project}.vayusetu_{tenant}.alerts`
-        SET {sets}
-        WHERE alert_id = @alert_id AND tenant = @tenant
-        """,
-        job_config=bigquery.QueryJobConfig(query_parameters=[
-            bigquery.ScalarQueryParameter("alert_id", "STRING", alert_id),
-            bigquery.ScalarQueryParameter("tenant", "STRING", tenant),
-            bigquery.ScalarQueryParameter("actor", "STRING", actor),
-        ]),
-    )
-    job.result()
-    if not job.num_dml_affected_rows:
-        raise KeyError(alert_id)
-    return {"alert_id": alert_id, "action": action, "by": MOCK_RECIPIENTS[actor]}
-
-
 def demo() -> None:
-    """
-    An alert must fire on a real local event, stay silent on a quiet hour, never
-    duplicate, and never name a real person.
-    """
+    """Fires on a confirmed local event, never on a faulty sensor or a one-hour blip."""
     import pathlib
 
     env = pathlib.Path(".env")
@@ -372,48 +175,28 @@ def demo() -> None:
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
-    # R6, checked in code rather than trusted: nothing here may look like a contact.
-    for key, name in MOCK_RECIPIENTS.items():
-        assert "@" not in key and "@" not in name, (key, name)
-        assert not any(ch.isdigit() for ch in name), f"{name} looks like it carries a number"
-        assert name.startswith("Demo:"), name
-
     local = evaluate("2025-10-30 08:00:00")
-    print(f"30 Oct 13:30 IST — {len(local['candidates'])} alert(s)")
+    print(f"30 Oct 13:30 IST — {len(local['candidates'])} trigger(s)")
     for c in local["candidates"]:
         print(f"  [{c['severity']:9s}] {c['headline']}")
-        print(f"              to: {', '.join(MOCK_RECIPIENTS[r] for r in c['recipients'])}")
     dwarka = [c for c in local["candidates"] if c["location_name"].startswith("NSIT Dwarka")]
-    assert dwarka, "a confirmed local event on a healthy monitor must raise a local alert"
-    assert dwarka[0]["severity"] == "emergency", dwarka  # 507 at 4.1x its surroundings
+    assert dwarka and dwarka[0]["severity"] == "emergency" and dwarka[0]["station_id"], dwarka
 
-    # The broken sensor and the one-hour blip raise nothing locally.
     faulty = evaluate("2025-11-16 06:00:00")
-    print(f"\n16 Nov 11:30 IST — {len(faulty['candidates'])} alert(s) "
-          "(Arya Nagar 918 is a sensor fault; Mandir Marg 472 is one unconfirmed hour)")
-    assert not [c for c in faulty["candidates"] if c["trigger_kind"] == "hyper_local_event"], \
-        "a faulty sensor or an unconfirmed hour must never dispatch anyone"
+    print(f"\n16 Nov 11:30 IST — {len(faulty['candidates'])} trigger(s)\n  {faulty['no_trigger_reason']}")
+    assert not [c for c in faulty["candidates"] if c["trigger_kind"] == "hyper_local_event"]
+    assert "Arya Nagar" in faulty["no_trigger_reason"] and "one hour only" in faulty["no_trigger_reason"]
 
     regional = evaluate("2025-11-11 20:00:00")
-    print(f"\n12 Nov 01:30 IST — {len(regional['candidates'])} alert(s)")
-    for c in regional["candidates"]:
-        print(f"  [{c['severity']:9s}] {c['headline']}")
-    assert {c["trigger_kind"] for c in regional["candidates"]} == {"regional_episode"}, \
-        "a uniform Severe blanket is one region-wide alert, not a pile of local ones"
+    print(f"\n12 Nov 01:30 IST — {len(regional['candidates'])} trigger(s)")
+    assert {c["trigger_kind"] for c in regional["candidates"]} == {"regional_episode"}
 
     quiet = evaluate("2025-10-29 10:00:00")
-    print(f"\n29 Oct 15:30 IST — {len(quiet['candidates'])} alert(s)")
-    print(f"  {quiet['no_trigger_reason']}")
-    assert not quiet["candidates"], "a clean hour must raise nothing"
-    assert quiet["no_trigger_reason"], "silence has to come with a reason"
+    print(f"\n29 Oct 15:30 IST — {len(quiet['candidates'])} trigger(s)\n  {quiet['no_trigger_reason']}")
+    assert not quiet["candidates"] and quiet["no_trigger_reason"]
 
-    # Ids are deterministic, so a second scan of the same hour cannot duplicate.
-    again = evaluate("2025-10-30 08:00:00")
-    assert ([c["alert_id"] for c in local["candidates"]]
-            == [c["alert_id"] for c in again["candidates"]]), "ids must be stable"
-
-    print("\n[OK] fires locally, once; one region-wide alert for a blanket; "
-          "silent with a reason when clean; mock recipients carry no contact details")
+    print("\n[OK] confirmed local event fires; faulty sensor and one-hour blip do not, with reasons; "
+          "one region-wide trigger for a blanket; silent with a reason when clean")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Broadcast, ClockCounterClockwise, Compass, Fire, Pulse, Question, Warning } from '@phosphor-icons/react';
-import AlertInbox from './AlertInbox';
+import { Broadcast, ClockCounterClockwise, Compass, Fire, FolderOpen, Pulse, Question, Warning } from '@phosphor-icons/react';
+import CaseDesk from './CaseDesk';
 import BriefPanel from './BriefPanel';
 import Guide from './Guide';
 import Hotspots from './Hotspots';
@@ -33,8 +33,11 @@ import { compassWords, EXPLAIN, inkOn } from '../lib/plain';
  * Sections of the officials desk, as hash routes so a link can point at one. The "now"
  * section stays mounted while another is shown: every new Google map is a billed load.
  */
-type Section = 'now' | 'monitors';
-const readSection = (): Section => (window.location.hash.startsWith('#/monitors') ? 'monitors' : 'now');
+type Section = 'now' | 'monitors' | 'cases';
+const readSection = (): Section => {
+  const h = window.location.hash;
+  return h.startsWith('#/monitors') ? 'monitors' : h.startsWith('#/cases') ? 'cases' : 'now';
+};
 
 const GUIDE_KEY = 'vayusetu-guide-hidden';
 const guideHidden = () => {
@@ -75,13 +78,15 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
   const [layers, setLayers] = useState<Layers>({ stations: true, fires: true, sector: true });
   const [showGuide, setShowGuide] = useState(() => !guideHidden());
   const [section, setSection] = useState<Section>(readSection);
-  const [openedMonitors, setOpenedMonitors] = useState(() => readSection() === 'monitors');
+  const [opened, setOpened] = useState<Record<Section, boolean>>(() => ({
+    now: true, monitors: readSection() === 'monitors', cases: readSection() === 'cases',
+  }));
 
   useEffect(() => {
     const onHash = () => {
       const s = readSection();
       setSection(s);
-      if (s === 'monitors') setOpenedMonitors(true);
+      setOpened(o => (o[s] ? o : { ...o, [s]: true }));
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -142,12 +147,20 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
               </span>
             )}
           </a>
+          <a className="tab" href="#/cases" aria-current={section === 'cases' ? 'page' : undefined}>
+            <FolderOpen size={18} /> Cases
+          </a>
         </div>
       </nav>
 
-      {openedMonitors && (
+      {opened.monitors && (
         <div className="desk-section" hidden={section !== 'monitors'}>
           <Monitors ts={ts} />
+        </div>
+      )}
+      {opened.cases && (
+        <div className="desk-section" hidden={section !== 'cases'}>
+          <CaseDesk ts={ts} />
         </div>
       )}
 
@@ -215,8 +228,6 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
       </main>
 
       <Hotspots hours={hot} loading={loading} onTs={onTs} />
-
-      <AlertInbox ts={ts} reloadKey={retry} />
 
       <section className="panel panel-pad" aria-labelledby="timeline-title">
         <h2 id="timeline-title" className="section-title">Four weeks of air quality, and what drove it</h2>

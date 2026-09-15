@@ -145,34 +145,25 @@ TABLE_SCHEMAS = {
             created_at TIMESTAMP NOT NULL
         );
     """,
-    "alerts": """
-        CREATE TABLE IF NOT EXISTS `{dataset}.alerts` (
-            alert_id STRING NOT NULL,
-            tenant STRING NOT NULL,
-            cell_id STRING,
-            city STRING,
-            alert_type STRING NOT NULL,
-            issued_at TIMESTAMP NOT NULL,
-            severity STRING NOT NULL,
-            population_exposed INT64,
-            attribution JSON,
-            recipients ARRAY<STRING>,
-            acknowledged_at TIMESTAMP,
-            acknowledged_by STRING,
-            trigger_kind STRING,
-            headline STRING,
-            location_name STRING,
-            lat FLOAT64,
-            lon FLOAT64,
-            observed_pm25 FLOAT64,
-            resolved_at TIMESTAMP,
-            resolved_by STRING,
-            ts_hour TIMESTAMP
+    "cases": """
+        CREATE TABLE IF NOT EXISTS `{dataset}.cases` (
+            case_id STRING NOT NULL, tenant STRING NOT NULL, kind STRING NOT NULL,
+            status STRING NOT NULL, severity STRING, title STRING, detail STRING,
+            station_id STRING, location_name STRING, lat FLOAT64, lon FLOAT64,
+            event_hour TIMESTAMP, owner STRING, copied ARRAY<STRING>, escalates_to STRING,
+            opened_at TIMESTAMP, due_at TIMESTAMP, evidence JSON, closure JSON,
+            closed_at TIMESTAMP, closed_by STRING
+        );
+    """,
+    "case_events": """
+        CREATE TABLE IF NOT EXISTS `{dataset}.case_events` (
+            case_id STRING NOT NULL, event_at TIMESTAMP NOT NULL, actor STRING,
+            action STRING NOT NULL, note STRING, detail JSON
         );
     """
 }
 
-TENANT_TABLES = ["raw_stations", "raw_satellite", "raw_meteorology", "predictions_grid", "predictions_forecast", "citizen_reports", "alerts"]
+TENANT_TABLES = ["raw_stations", "raw_satellite", "raw_meteorology", "predictions_grid", "predictions_forecast", "citizen_reports", "cases", "case_events"]
 SHARED_TABLES = ["raw_fires", "grid_cells"]
 
 
