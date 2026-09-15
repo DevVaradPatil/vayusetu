@@ -99,10 +99,11 @@ Every endpoint is unauthenticated, which a judged live link requires. Two conseq
   against a 500-per-day limit, and the window has 648 hours. Photo triage costs one call
   per upload. `--max-instances 2` caps cost, not calls. If the quota is exhausted the
   site says the explanation is unavailable rather than inventing one — measurements,
-  hotspots, alerts, translation and speech keep working, because none of them use Gemini.
-- **Anyone can raise, acknowledge or resolve alerts in the mock inbox.** The recipients
+  hotspots, monitor health, cases, translation and speech keep working; photo closures
+  are refused rather than accepted.
+- **Anyone can open, take or try to close cases in the shared demo queue.** The agencies
   are demo accounts with no contact details (AGENTS.md R6), so nobody can be notified —
-  but the inbox state is shared by every visitor. A production deployment puts these
+  but the queue is shared by every visitor. A production deployment puts these
   routes behind identity (IAP or Firebase Auth) and records a real, authorised actor.
 
 ---
@@ -115,7 +116,7 @@ Every endpoint is unauthenticated, which a judged live link requires. Two conseq
 > estimator lost to interpolation, the forecaster lost to diurnal persistence, and the
 > registry refuses both, so there is no model to import and no inference job to run. A
 > new city today gets ingestion, evidence, attribution briefs, hotspot detection and
-> alerts — everything in Part A — by adding a tenant and backfilling its data. Lucknow
+> monitor health and cases — everything in Part A — by adding a tenant and backfilling its data. Lucknow
 > (`vayusetu_lko`) has been provisioned but not ingested.
 
 ## Overview

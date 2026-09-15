@@ -110,7 +110,7 @@ persistence is +0.20 with a bootstrap 90% CI of **−0.16 to +0.56**. And
 driver with a clean mechanism is the one that cannot be forecast at all. Harness:
 `ml/evaluate_warning.py`. Full numbers: TODO.md 2026-09-12b.
 
-**Alerts therefore fire on observed conditions, not predicted ones** (§6a). An official
+**Cases are therefore raised from observed conditions, not predicted ones** (§6a). An official
 who evacuates a school district on a warning we cannot demonstrate, or who stops
 trusting the system after two false alarms, is worse off than with no warning at all.
 
@@ -525,10 +525,11 @@ own (rule R4), and the resident page tells people so.
 | `GET /api/v1/{tenant}/hotspots?ts=` | Hyper-local events for one hour, plus the whole field they stand out from |
 | `GET /api/v1/{tenant}/hotspots/top?limit=` | The sharpest local events in the window, ranked, each with its hour |
 | `GET /api/v1/{tenant}/monitors/health?ts=&days=` | Every monitor: faulty, offline, suspect or healthy, with evidence |
-| `GET /api/v1/{tenant}/alerts?status=` | The mock alert inbox |
-| `GET /api/v1/{tenant}/alerts/preview?ts=` | What this hour would raise — **writes nothing** |
-| `POST /api/v1/{tenant}/alerts/dispatch?ts=` | Raise them, idempotently |
-| `POST /api/v1/{tenant}/alerts/{id}/{acknowledge\|resolve}?actor=` | Act on one, as a named mock account |
+| `GET /api/v1/{tenant}/cases` | The queue: owner, deadline, overdue, closure verdict, audit trail |
+| `GET /api/v1/{tenant}/cases/preview?ts=` | What this hour's measurements justify — **writes nothing** |
+| `POST /api/v1/{tenant}/cases/raise?ts=` | Open them, never duplicating open work |
+| `POST /api/v1/{tenant}/cases/{id}/acknowledge?actor=` | Take ownership, as a named demo account |
+| `POST /api/v1/{tenant}/cases/{id}/close` (multipart) | Photo + note + location; closes only if the evidence and the measurements agree |
 
 Two design decisions:
 
@@ -562,50 +563,116 @@ pattern-checked. A backtick tenant or SQL in `date_from` returns 422.
 
 ---
 
-## 6a. Alerts
+## 6a. Cases: from a trusted measurement to verified closure
 
-**File: `api/alerts.py`.**
+**Files: `api/cases.py`, `api/gemini/closure.py`; triggers in `api/alerts.py`.**
 
-The track asks us to alert authorities for rapid intervention. Two properties of this
-engine are consequences of measurements, not preferences.
+The track asks us to alert authorities for rapid intervention. Research into how India's
+response actually works found that it rarely fails at detection. It fails at closure:
 
-**It fires on observed conditions, never on a prediction.** The day-ahead warning was
-built and falsified (§2.4). A trigger is therefore always something happening now:
+- The Green Delhi app took **84,765** pollution complaints in 2024; **10,656** went
+  overdue, and no department met its stipulated deadlines.
+- Closures are unreliable: one department had **99 of the 183** complaints it "resolved"
+  reopened; another 76 of 226.
+- CAQM's flying squads report "unsatisfactory levels of compliance" at inspected sites.
 
-| Trigger | Condition | Severity from |
+So an alert on its own is not the product. A **case** is: work for a named agency, with
+a deadline, that can only be closed when the evidence and the measurements agree.
+
+### What opens a case
+
+Only trusted measurements (§4b), and never a forecast — the day-ahead warning was
+falsified (§2.4). Triggers live in `api/alerts.py`:
+
+| Kind | Raised when | Owner | Copied | Deadline |
+|---|---|---|---|---|
+| `local_event` | A **confirmed** hyper-local event (§4a) | The town's municipal body | The state board | 24 h |
+| `monitor_fault` | A government monitor is `faulty` or `offline` (§4b) | The monitor's operator | The state board | 72 h |
+| `regional_episode` | Regional median ≥ 250 (CPCB Severe) | The state board | CAQM | 12 h |
+
+**Routing needs no lookup service.** Every monitor's name carries its operator and town —
+`NSIT Dwarka, Delhi - CPCB`, `Arya Nagar, Bahadurgarh - HSPCB` — so a fault goes to the
+operator and a local event to that town's municipal body. Community sensors on OpenAQ
+("Air Check", "GK1 (Oberoi Terrace)") get no maintenance case: a state board cannot
+repair a private device, and a case nobody can act on is noise. Their readings are still
+excluded when untrusted.
+
+Open work is never duplicated: one open case per faulty monitor, one per local event
+within 6 hours at the same monitor, one open regional episode. Overdue and escalation to
+CAQM are computed when a case is read, from its deadline, so there is no scheduler that
+can fail silently.
+
+On 30 October 2025 at 08:00 UTC this opens 9 cases: NSIT Dwarka to the Municipal
+Corporation of Delhi, and eight monitor faults — including Faridabad Sector 11, Faridabad
+New Industrial Town and Gurugram Sector 51 as dark, the same stations Newslaundry reported
+offline in those days.
+
+### How a case closes
+
+Two independent checks, **decided in code** (`decide_closure`, a pure function), never by
+the model:
+
+1. **The photo.** Gemini describes it (`api/gemini/closure.py`): is it a genuine camera
+   photo of a real place, is an active source still visible (smoke, flames, a dust cloud,
+   uncovered material, a garbage heap), is monitoring equipment in frame. It describes;
+   it does not decide. A local event also needs the upload within **1 km** of the site.
+2. **The measurement.** What the monitor recorded afterwards
+   (`outcome_local_event`, `outcome_monitor_fault`, `outcome_regional`), judged on the
+   last three trusted hours of a 24-hour window.
+
+| Photo | Measurement | Result |
 |---|---|---|
-| `hyper_local_event` | A monitor flagged by §4a | Observed value, ratio to its surroundings (≥ 3× is an emergency) |
-| `regional_episode` | Regional median in the CPCB Severe band (≥ 250) | ≥ 250 warning, ≥ 350 emergency |
+| Passes | Resolved | `closed_verified` |
+| Passes | **Persisting** | **Refused** — however good the photo |
+| Fails (screenshot, source still visible, too far, missing) | any | **Refused** |
+| Passes | No trusted data to judge | `closed_unverified` — never counted as verified |
 
-Nothing fires below Severe. Very Poor is most of a Delhi winter, and an alert that
-fires every day is an alert nobody reads.
+A refused closure keeps the case open and writes the reasons into the audit trail. The
+desk's headline numbers are accountability numbers: open, overdue, closed and verified,
+closed without proof, and closures refused.
 
-**Severity no longer comes from `residual`.** The previous engine keyed off model
-estimate minus interpolation — the quantity this project falsified first — so it was
-deleted rather than ported.
+**Measured on the replay data:**
 
-### Two guards that are about the shape of the code, not this demo
+- NSIT Dwarka (30 Oct): the local excess **subsided 2 h after** the event and stayed
+  down, so a valid photo closes it verified.
+- Arya Nagar's monitor (16 Nov): **still faulty**, 4 faulty hours in the last 12, so a
+  technician's photo cannot close it.
+- The region (12 Nov 01:30 IST): **still Severe**, median 304 a day later, so a note that
+  GRAP measures were applied cannot close it.
 
-**Raising is a POST; previewing is a GET that writes nothing.** Every recipient here is
-a demo account, so no page load could notify anyone either way. The split exists because
-a page load that dispatches is one wiring change away from paging a real official, and
-that change should have to be visible in a diff.
+Against BigQuery, closures were refused without a photo, for the region with a note, and
+for a synthetic gradient that Gemini classified as a graphic. Email-address "actors" are
+rejected.
 
-**R6, enforced by construction.** Recipients have a role key and a display name and
-**no address field of any kind** — no email, no phone, no webhook. There is no string in
-this codebase that could be pasted into a mailer or mistaken for a real contact. The
-self-check asserts it: a recipient name containing `@` or a digit fails the test.
+### Honest limits
 
-Acting requires naming which mock account you are, and the row records it. An alert
-nobody is accountable for is the failure mode the inbox exists to prevent. Resolving an
-alert that was never acknowledged backfills the acknowledgement, so the trail has no
-gap.
+- **In the replay, "afterwards" is the 24 recorded hours after the event**, not the hours
+  after someone presses Close. In live operation the window starts at the closure.
+- **Location is what the uploader's device reports.** Browsers usually strip EXIF GPS,
+  so it cannot be cross-checked against the photo itself. For demo reviewers who are not
+  in Delhi, the form offers the case's own coordinates; that is recorded as
+  `location_source: demo_case_location` and shown in the audit trail as "not a field
+  visit".
+- **Gemini's closure descriptions are verified only on rejection** (a synthetic image),
+  not against a labelled set of real site photos.
+- **Photos are not stored**, only their SHA-256 and Gemini's description. That protects
+  privacy and keeps the demo free of personal images, and means a disputed closure cannot
+  be re-examined from the original photo.
 
-Alert ids are `sha1(tenant|trigger|key|hour)`, so re-scanning an hour updates rather
-than duplicates — an inbox that grows a copy per reload is unreadable during exactly the
-episode when it matters. Writes go through `MERGE`/`UPDATE` DML rather than the
-streaming API, because streamed rows cannot be updated for up to 30 minutes and
-acknowledging an alert seconds after it is raised is the normal case.
+### Guards that are about the shape of the code
+
+**Opening is a POST; previewing is a GET that writes nothing.** Every agency is a demo
+account, so no page load could notify anyone — but a page load that assigns work is one
+wiring change away from paging a real official, and that change should have to show up in
+a diff.
+
+**R6 by construction.** Agencies and actors are a key and a display name beginning
+`Demo:`, with no address field of any kind. The self-check asserts it.
+
+**R4.** No case is ever raised from a photo; a photo is only closure evidence.
+
+Writes use `MERGE`/`UPDATE` DML, not the streaming API: streamed rows cannot be updated
+for up to 30 minutes, and acting on a case seconds after it opens is the normal case.
 
 ---
 
@@ -767,7 +834,9 @@ and Cloud Run swallowing `/healthz`) are in `docs/DEPLOYMENT.md`.
 | `api/evidence.py` | **The core.** Evidence assembly, upwind geometry, event rendering |
 | `api/hotspots.py` | Hyper-local event detection, measurement only (§4a) |
 | `api/integrity.py` | Per-reading integrity checks and monitor status (§4b) |
-| `api/alerts.py` | Alert triggers on observed conditions, mock-only dispatch (§6a) |
+| `api/alerts.py` | What an hour's trusted measurements justify (§6a) |
+| `api/cases.py` | Case routing, deadlines, closure policy and outcome checks (§6a) |
+| `api/gemini/closure.py` | Gemini's description of a closure photo — describes, never decides (§6a) |
 | `api/gemini/brief.py` | Prompt, response schema, and the R5 verifier |
 | `api/gemini/advisory.py` | Translation into ten languages |
 | `api/routes_episode.py` | The product's endpoints, caching and generation lock |
@@ -816,7 +885,8 @@ about what it does not know.
   the API returns `transfer_measured: false` rather than an estimate.
 - **The live view is thin** — 7 stations — because the upstream feed is stalled.
 - **The public demo's quotas are public.** Anyone can spend Gemini calls (500/day) by
-  opening uncached hours, and anyone can act in the shared mock alert inbox. Without
-  Gemini the site still shows measurements, hotspots, alerts, translation and speech,
-  and says the explanation is unavailable. Production would put alert actions behind
+  opening uncached hours or submitting closure photos, and anyone can act on the shared
+  demo case queue. Without Gemini the site still shows measurements, hotspots, monitor
+  health, cases, translation and speech, and says the explanation is unavailable;
+  closures that need a photo are refused rather than accepted. Production would put case actions behind
   identity.

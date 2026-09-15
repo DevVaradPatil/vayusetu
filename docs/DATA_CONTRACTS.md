@@ -316,6 +316,14 @@ Prompt requirements, enforced in the prompt and checked in code:
 
 ## 5. REST API surface
 
+> **Superseded, kept for the record (2026-09-15).** This is the API as originally
+> planned. Several of these endpoints were built as mocks and then deleted because they
+> returned invented numbers or depended on falsified models: `/grid`, `/cells`,
+> `/forecast`, `/forecast/backtest`, `/stations/current`, `/agent/ask`, and the alert inbox
+> (`/alerts`), which was replaced by cases. The API actually served, with the reason for
+> each endpoint, is in [`ARCHITECTURE.md` §6](ARCHITECTURE.md#6-the-api); a running
+> service also documents itself at `/docs`.
+
 Base: `/api/v1`. JSON everywhere. All errors use RFC 7807 `application/problem+json`.
 
 ```

@@ -22,7 +22,7 @@ VayuSetu answers the three questions that follow the number:
 | *Where is it worst, far beyond the average?* | Each monitor against the robust median of the monitors around it |
 | *Why?* | NASA FIRMS fire detections, sectored by ERA5 wind; boundary layer height |
 | *Who should act, and how urgently?* | Gemini, reasoning over the measured evidence |
-| *Was anybody told, and did they pick it up?* | An alert inbox with acknowledge and resolve, dispatched to demo accounts only |
+| *Who owns it, by when — and was it really fixed?* | Cases routed to the responsible agency with deadlines; closure needs a Gemini-checked site photo **and** measurements showing the problem gone |
 
 It then says it again, in the resident's own language.
 
@@ -313,17 +313,22 @@ score. They never set a PM2.5 value and never trigger an alert on their own —
 untrusted input must not be able to dispatch a government response.
 
 **The live demo is public, so its quotas are too.** Every uncached hour opened costs a
-Gemini call against a 500-per-day limit, and anyone can act in the shared mock alert
-inbox. When the quota runs out the site says the explanation is unavailable; hotspots,
-alerts, translation and speech keep working because none of them use Gemini. A real
-deployment puts alert actions behind identity.
+Gemini call against a 500-per-day limit, and anyone can act on the shared demo case
+queue. When the quota runs out the site says the explanation is unavailable and refuses
+photo closures; hotspots, monitor health, cases, translation and speech keep working. A
+real deployment puts case actions behind identity.
 
-**Alerts go to mock accounts, and fire on observations only.** A recipient has a role
-key and a display name and no address field of any kind — no email, no phone, no
-webhook — so no string here could be pasted into a mailer. Raising an alert is a POST a
-person presses; previewing is a GET that writes nothing, so no page load can notify
-anyone. Triggers are a Severe hour now or a hyper-local event now, never a forecast: the
-day-ahead warning was tested and did not beat a calendar.
+**Cases go to demo accounts, and open on observations only.** Agencies have a key and
+a display name and no address field of any kind, so no string here could be pasted into a
+mailer. Opening cases is a POST a person presses; previewing is a GET that writes
+nothing. Triggers are a trusted Severe hour, a confirmed local event, or a broken
+government monitor — never a forecast.
+
+**Closure verification has three soft spots.** In the replay the measured outcome is the
+24 recorded hours after the event, not the hours after someone presses Close. Location is
+whatever the uploader's device reports (demo reviewers can use the case's coordinates,
+which is recorded as "not a field visit"). And Gemini's photo descriptions are verified
+only on rejection so far, not against a labelled set of real site photos.
 
 **Transfer accuracy is unmeasured.** The Delhi-to-Lucknow import works, but the
 degradation figure will only be real once Lucknow's own stations have been ingested
