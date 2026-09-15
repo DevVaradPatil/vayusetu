@@ -527,6 +527,67 @@ button { font: inherit; color: inherit; }
 .hs-jump-num { font-size: 19px; font-weight: 500; color: var(--flag-fg); }
 .hs-jump-vs { grid-column: 1 / -1; font-size: 13px; color: var(--on-surface-dim); }
 
+/* ── Section navigation inside the officials view ─────────────────────────── */
+
+/* The wrappers exist only to hide a section; they must not change the page's grid. */
+.desk-section { display: contents; }
+.swatch--untrusted { background: transparent; border: 2px solid var(--outline); }
+.desk-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.desk-nav .tabs { flex-wrap: wrap; }
+.desk-badge {
+  display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: var(--r-pill); background: var(--error-container); color: var(--on-error-container);
+  font-size: 12px; font-weight: 700;
+}
+
+/* ── Monitor health ───────────────────────────────────────────────────────── */
+
+.mon-headline { display: grid; gap: 10px; margin-top: 14px; }
+.mon-headline p { font-size: 16px; }
+.mon-counts { display: flex; flex-wrap: wrap; gap: 6px; }
+.mon-chip .num { font-weight: 700; }
+.mon-list { display: grid; gap: 8px; margin-top: 14px; padding: 0; list-style: none; }
+.mon-item {
+  display: grid; gap: 6px; min-width: 0; padding: 12px 14px;
+  border: 1px solid var(--outline-variant); border-radius: var(--r-small);
+  background: var(--surface-container-lowest);
+}
+.mon-item--faulty { border-left: 4px solid var(--error); }
+.mon-item--offline { border-left: 4px solid var(--outline); }
+.mon-item--suspect { border-left: 4px solid var(--flag-fg); }
+.mon-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.mon-name { font-size: 15.5px; font-weight: 600; }
+.mon-meta { margin-left: auto; font-size: 13px; color: var(--on-surface-dim); }
+.mon-status {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: var(--r-pill);
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap;
+}
+.mon-status--faulty { background: var(--error-container); color: var(--on-error-container); }
+.mon-status--offline { background: var(--surface-container-high); color: var(--on-surface-variant); }
+.mon-status--suspect { background: var(--flag-bg); color: var(--flag-fg); }
+.mon-status--healthy { background: var(--primary-container); color: var(--on-primary-container); }
+.mon-wrong { font-size: 14.5px; line-height: 1.5; }
+.mon-action { font-size: 13.5px; font-weight: 600; color: var(--on-surface-variant); }
+.mon-evidence { display: grid; gap: 4px; min-width: 0; }
+.mon-ev-label { font-size: 12.5px; color: var(--on-surface-dim); }
+.mon-strip { display: grid; gap: 2px; overflow-x: auto; }
+.mon-strip-row { display: grid; grid-template-columns: 104px repeat(7, minmax(44px, 1fr)); gap: 2px; }
+.mon-strip-head { font-size: 12.5px; color: var(--on-surface-variant); align-self: center; }
+.mon-cell {
+  padding: 4px 6px; border-radius: 4px; background: var(--surface-container);
+  font-size: 13.5px; text-align: right;
+}
+.mon-cell--ref { background: transparent; color: var(--on-surface-dim); }
+.mon-cell--at { outline: 2px solid var(--primary); outline-offset: -2px; font-weight: 700; }
+
+/* ── Hotspot confirmation ─────────────────────────────────────────────────── */
+
+.hs-confirm { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; }
+.hs-confirm--yes { color: var(--on-surface); }
+.hs-confirm--no { color: var(--on-surface-dim); }
+.hs-excluded { margin-top: 14px; padding: 12px 14px; border-radius: var(--r-small); background: var(--surface-container); font-size: 14px; line-height: 1.55; }
+.hs-excluded strong { color: var(--on-surface); }
+
 /* ── Alert inbox ──────────────────────────────────────────────────────────── */
 
 .al-bar {

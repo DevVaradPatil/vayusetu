@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Crosshair, MapPin, Users } from '@phosphor-icons/react';
+import { CheckCircle, Crosshair, MapPin, Users } from '@phosphor-icons/react';
 import InfoTip from './InfoTip';
 import { band, fetchTopEvents, fmtLong, type Hotspot, type HotspotHour } from '../lib/data';
 import { EXPLAIN, inkOn } from '../lib/plain';
@@ -32,7 +32,14 @@ export default function Hotspots({ hours, loading, onTs }: Props) {
   // window list is never shown.
   useEffect(() => {
     if (!none || top) return;
-    fetchTopEvents(6).then(d => setTop(d.events)).catch(() => setTop([]));
+    // Confirmed events only, one per locality: the list is "where to look next", and six
+    // rows of the same monitor on consecutive hours would bury every other place.
+    fetchTopEvents(40)
+      .then(d => {
+        const seen = new Set<string>();
+        setTop(d.events.filter(e => e.confirmed && !seen.has(e.station_id) && seen.add(e.station_id)).slice(0, 6));
+      })
+      .catch(() => setTop([]));
   }, [none, top]);
 
   return (
@@ -60,18 +67,34 @@ export default function Hotspots({ hours, loading, onTs }: Props) {
         </>
       )}
 
+      {!loading && hours && hours.excluded_as_sensor_fault.length > 0 && (
+        <div className="hs-excluded fade">
+          <strong>Not counted: {hours.excluded_as_sensor_fault.length === 1 ? 'one reading' : `${hours.excluded_as_sensor_fault.length} readings`} from a faulty monitor.</strong>{' '}
+          {hours.excluded_as_sensor_fault.map(f => `${f.name.replace(/ - [A-Z]+$/, '')} read ${f.pm25.toFixed(0)}`).join('; ')}
+          {' '}— but the instrument was misbehaving within three hours of that reading, so it raises no
+          hotspot and no alert. See Monitors for the evidence.
+        </div>
+      )}
+
       {none && (
         <div className="hs-none fade">
-          <p>
-            <strong>No local event this hour — the whole region is affected at once.</strong>{' '}
-            All {hours.n_reporting} monitors read badly together, around{' '}
-            {hours.regional_median?.toFixed(0)} µg/m³, so no single locality stands out. That
-            needs a region-wide response, not an inspection team sent to one address.
-          </p>
+          {(hours.regional_median ?? 0) >= 250 ? (
+            <p>
+              <strong>No local event this hour — the whole region is affected at once.</strong>{' '}
+              All {hours.n_reporting} monitors read badly together, around{' '}
+              {hours.regional_median?.toFixed(0)} µg/m³, so no single locality stands out. That
+              needs a region-wide response, not an inspection team sent to one address.
+            </p>
+          ) : (
+            <p>
+              <strong>No local event this hour.</strong> No trusted monitor stands far above the
+              regional middle of {hours.regional_median?.toFixed(0)} µg/m³.
+            </p>
+          )}
           {top === null && <div className="skeleton" style={{ height: 60, marginTop: 12 }} />}
           {top && top.length > 0 && (
             <>
-              <h3 className="hs-sub">The sharpest local events in these four weeks</h3>
+              <h3 className="hs-sub">The sharpest confirmed local events in these four weeks</h3>
               <ul className="hs-list">
                 {top.map(e => (
                   <li key={`${e.ts}-${e.station_id}`}>
@@ -81,8 +104,8 @@ export default function Hotspots({ hours, loading, onTs }: Props) {
                       </span>
                       <span className="hs-jump-num num">{e.pm25.toFixed(0)}</span>
                       <span className="hs-jump-vs">
-                        vs {e.regional_median?.toFixed(0)} around it · {e.times_regional}× ·{' '}
-                        {fmtLong(isoOf(e.ts!))}
+                        vs {e.regional_median?.toFixed(0)} around it · {e.times_regional}× · lasted{' '}
+                        {e.persistent_hours} h · {fmtLong(isoOf(e.ts!))}
                       </span>
                     </button>
                   </li>
@@ -103,6 +126,11 @@ function Card({ h }: { h: Hotspot }) {
       <div className="hs-card-head">
         <span className="band-pill" style={{ background: b.color, color: inkOn(b.color) }}>{b.name}</span>
         {h.times_regional && <span className="hs-mult num">{h.times_regional}× the area around it</span>}
+        {h.confirmed ? (
+          <span className="hs-confirm hs-confirm--yes"><CheckCircle size={14} weight="fill" /> Confirmed · {h.persistent_hours} h</span>
+        ) : (
+          <span className="hs-confirm hs-confirm--no">One hour only — not confirmed, no alert</span>
+        )}
       </div>
       <h3 className="hs-name">{h.name.replace(/ - [A-Z]+$/, '')}</h3>
       <div className="hs-value">

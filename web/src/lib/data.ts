@@ -136,10 +136,48 @@ export interface Hotspot {
   robust_z: number | null;
   population_in_cell: number | null;
   is_hotspot: boolean;
+  /** The reading passed the integrity gate (api/integrity.py). */
+  trusted?: boolean;
+  integrity_flags?: string[];
+  /** Consecutive trusted outlier hours; an event is confirmed at 2 or more. */
+  persistent_hours?: number;
+  confirmed?: boolean;
   /** Only on /hotspots/top, where each row is a different hour. */
   ts?: string;
   regional_median?: number;
   n_reporting?: number;
+}
+
+export type MonitorStatus = 'faulty' | 'offline' | 'suspect' | 'healthy';
+
+/** One monitor's trustworthiness over a window, with raw readings as evidence. */
+export interface MonitorHealth {
+  station_id: string;
+  name: string;
+  lat: number;
+  lon: number;
+  status: MonitorStatus;
+  uptime: number;
+  fault_rate: number;
+  hours_expected: number;
+  hours_reported: number;
+  dark_during_severe_hours: number;
+  severe_hours: number;
+  flag_counts: { stuck: number; dead_zero: number; spike: number; low_in_episode: number };
+  example: {
+    at: string;
+    flags: string[];
+    /** The monitor's readings from 3 hours before to 3 hours after `at`. */
+    readings: (number | null)[];
+    regional_median: (number | null)[];
+  } | null;
+}
+
+export interface NetworkHealth {
+  window: [string, string];
+  method: string;
+  summary: Record<MonitorStatus, number>;
+  monitors: MonitorHealth[];
 }
 
 export interface HotspotHour {
@@ -149,6 +187,8 @@ export interface HotspotHour {
   n_reporting: number;
   method: string;
   hotspots: Hotspot[];
+  /** Outliers the integrity gate refused: the reading looks extreme but the monitor is misbehaving. */
+  excluded_as_sensor_fault: Hotspot[];
   field: Hotspot[];
 }
 
@@ -246,7 +286,13 @@ export const fetchHotspots = (ts: string) =>
   get<HotspotHour>(`/api/v1/${TENANT}/hotspots?${q(ts)}`);
 
 export const fetchTopEvents = (limit = 8) =>
-  get<{ method: string; events: Hotspot[] }>(`/api/v1/${TENANT}/hotspots/top?limit=${limit}`);
+  get<{ method: string; events: Hotspot[]; trusted_events: number; excluded_as_sensor_fault: number }>(
+    `/api/v1/${TENANT}/hotspots/top?limit=${limit}`,
+  );
+
+/** Monitor health over the `days` before the selected hour. */
+export const fetchMonitorHealth = (ts: string, days = 7) =>
+  get<NetworkHealth>(`/api/v1/${TENANT}/monitors/health?${q(ts)}&days=${days}`);
 
 /** The demo accounts alerts are dispatched to. No real official is reachable from here. */
 export const ACTORS: { key: string; label: string }[] = [

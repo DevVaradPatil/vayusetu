@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Broadcast, ClockCounterClockwise, Compass, Fire, Question, Warning } from '@phosphor-icons/react';
+import { Broadcast, ClockCounterClockwise, Compass, Fire, Pulse, Question, Warning } from '@phosphor-icons/react';
 import AlertInbox from './AlertInbox';
 import BriefPanel from './BriefPanel';
 import Guide from './Guide';
 import Hotspots from './Hotspots';
+import Monitors from './Monitors';
 import InfoTip from './InfoTip';
 import MapView, { type Layers } from './MapView';
 import Timeline from './Timeline';
@@ -27,6 +28,13 @@ import { compassWords, EXPLAIN, inkOn } from '../lib/plain';
  * against something observed. The hotspots panel is measurement too — a monitor
  * against the monitors around it — which is why it can honestly report none.
  */
+
+/**
+ * Sections of the officials desk, as hash routes so a link can point at one. The "now"
+ * section stays mounted while another is shown: every new Google map is a billed load.
+ */
+type Section = 'now' | 'monitors';
+const readSection = (): Section => (window.location.hash.startsWith('#/monitors') ? 'monitors' : 'now');
 
 const GUIDE_KEY = 'vayusetu-guide-hidden';
 const guideHidden = () => {
@@ -66,6 +74,18 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
   const [retry, setRetry] = useState(0);
   const [layers, setLayers] = useState<Layers>({ stations: true, fires: true, sector: true });
   const [showGuide, setShowGuide] = useState(() => !guideHidden());
+  const [section, setSection] = useState<Section>(readSection);
+  const [openedMonitors, setOpenedMonitors] = useState(() => readSection() === 'monitors');
+
+  useEffect(() => {
+    const onHash = () => {
+      const s = readSection();
+      setSection(s);
+      if (s === 'monitors') setOpenedMonitors(true);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   useEffect(() => {
     fetchTimeline()
@@ -102,9 +122,36 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
     () => new Set((hot?.hotspots ?? []).map(h => h.name)),
     [hot],
   );
+  const untrustedNames = useMemo(
+    () => new Set((hot?.field ?? []).filter(f => f.trusted === false).map(f => f.name)),
+    [hot],
+  );
 
   return (
     <>
+      <nav className="desk-nav" aria-label="Officials desk">
+        <div className="tabs">
+          <a className="tab" href="#/" aria-current={section === 'now' ? 'page' : undefined}>
+            <Pulse size={18} /> This hour
+          </a>
+          <a className="tab" href="#/monitors" aria-current={section === 'monitors' ? 'page' : undefined}>
+            <Broadcast size={18} /> Monitors
+            {untrustedNames.size > 0 && (
+              <span className="desk-badge" title={`${untrustedNames.size} readings not trusted this hour`}>
+                {untrustedNames.size}
+              </span>
+            )}
+          </a>
+        </div>
+      </nav>
+
+      {openedMonitors && (
+        <div className="desk-section" hidden={section !== 'monitors'}>
+          <Monitors ts={ts} />
+        </div>
+      )}
+
+      <div className="desk-section" hidden={section !== 'now'}>
       {err && (
         <div className="error-bar" role="alert">
           <Warning size={20} />
@@ -118,7 +165,7 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
 
       <main className="app-grid">
         <section className="panel map-panel" aria-label="Map of air monitors, fires and wind">
-          <MapView data={mapData} ev={ev} layers={layers} theme={theme} hotspots={hotNames} />
+          <MapView data={mapData} ev={ev} layers={layers} theme={theme} hotspots={hotNames} untrusted={untrustedNames} />
 
           <div className="map-overlay map-controls" role="group" aria-label="Show on map">
             {LAYERS.map(({ key, Icon, text }) => (
@@ -144,6 +191,7 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
             ))}
             <span className="legend-item"><i className="swatch" style={{ background: 'var(--fire)' }} />Fire</span>
             <span className="legend-item"><i className="swatch swatch--fan" />Wind fan</span>
+            <span className="legend-item"><i className="swatch swatch--untrusted" />Not trusted</span>
           </div>
 
           {loading && (
@@ -189,6 +237,7 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
         weather records and Google Earth Engine. Explanations by Gemini, checked against the
         measurements before they are shown.
       </footer>
+      </div>
     </>
   );
 }

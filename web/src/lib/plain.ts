@@ -54,6 +54,13 @@ export const EXPLAIN = {
   replay:
     'A real smog episode from November 2025, replayed with the actual data. Delhi’s live ' +
     'monitor feed is patchy right now, so a complete past event shows the system best.',
+  integrity:
+    'Each hourly reading is checked for four patterns real air does not produce: the exact ' +
+    'same value for 3 or more hours, zero while the region is polluted, a jump of hundreds ' +
+    'that reverses within an hour, and a reading far cleaner than every neighbour during ' +
+    'severe smog. The first three mean the instrument is faulty, and its readings are left ' +
+    'out. The last is only a reason to inspect the site — a monitor can genuinely sit in a ' +
+    'cleaner pocket. Thresholds were set from 35,602 real readings, not guessed.',
   alerts:
     'An alert is raised from what the monitors actually read this hour — a locality far ' +
     'above its neighbours, or the whole region in the Severe band. Never from a forecast: ' +

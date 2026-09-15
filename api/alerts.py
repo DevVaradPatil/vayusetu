@@ -166,12 +166,25 @@ def evaluate(ts_str: str, tenant: str = "ncr",
 
     reason = None
     if not candidates:
-        reason = (
-            f"No trigger met. {hs['n_reporting']} monitors reporting, regional median "
-            f"{median:.0f} ug/m3 — below the Severe line of {SEVERE_PM25:.0f} — and no "
-            "monitor stands far enough above its neighbours to flag."
-            if median is not None else "No monitors reported in this hour."
-        )
+        if median is None:
+            reason = "No monitors reported in this hour."
+        else:
+            # Say exactly why nothing fired. "No monitor stood out" is false when one did
+            # but was a one-hour blip or a faulty instrument, and an officer who can see
+            # a spike on the map needs to know which.
+            parts = [f"No trigger met. {hs['n_reporting']} monitors reporting, regional median "
+                     f"{median:.0f} ug/m3, below the Severe line of {SEVERE_PM25:.0f}."]
+            unconfirmed = [h for h in hs["hotspots"] if not h["confirmed"]]
+            faulty = hs["excluded_as_sensor_fault"]
+            if unconfirmed:
+                parts.append(f"{', '.join(h['name'].rsplit(' - ', 1)[0] for h in unconfirmed)} "
+                             "stood out for one hour only, which is not enough to send anyone.")
+            if faulty:
+                parts.append(f"{', '.join(h['name'].rsplit(' - ', 1)[0] for h in faulty)} "
+                             "read high, but the instrument was faulty within 3 hours.")
+            if not unconfirmed and not faulty:
+                parts.append("No monitor stands far enough above its neighbours to flag.")
+            reason = " ".join(parts)
 
     return {"ts": ts_str, "tenant": tenant, "candidates": candidates, "no_trigger_reason": reason}
 
