@@ -81,6 +81,56 @@ enabled, all three datasets and 16 tables created, and real data landed.
 
 ---
 
+## FINDING 2026-09-15b — fire counts undercount farm burning ~10×, and unevenly by district
+
+Researched for "detect hidden pollution sources". Fire counts are the number India's
+stubble-burning response is run on, and they come from polar satellites passing over
+Punjab around 10:30-13:30. iFOREST (Dec 2025, SEVIRI geostationary data) found 90% of
+large Punjab fires in 2024-25 burned after 3 PM, against 3% in 2021.
+
+### Measured — `ingestion/fire_ledger.py` → `vayusetu_shared.fire_ledger`
+
+MODIS MCD64A1 burn scars (500 m) against VIIRS S-NPP daytime detections (FIRMS science
+archive), 1 Oct - 30 Nov, FAO GAUL districts:
+
+| | 2020 | 2021 | 2022 | 2023 | 2024 | 2025 |
+|---|---|---|---|---|---|---|
+| Punjab burned km² | 17,565 | 17,531 | 16,419 | 14,689 | 6,244 | 8,965 |
+| Punjab daytime detections | 74,975 | 77,722 | 46,260 | 30,766 | 8,781 | 3,936 |
+| **Punjab km² per detection** | 0.23 | 0.23 | 0.35 | 0.48 | 0.71 | **2.28** |
+| Haryana km² per detection | 0.33 | 0.34 | 0.60 | 0.41 | 0.27 | **1.39** |
+
+Detections fell 95%; burned land fell 49%. Night detections stay at 82-136 a season, so
+the 01:30 pass does not see the evening fires either.
+
+**Districts rank differently.** 2025: Amritsar is #1 by detections, #10 by land burned.
+Sangrur (#3 → #1) burns 20.5× more land per alert than in 2020-21, Mansa (#10 → #4) 22.2×,
+Faridkot 16.3×, Bathinda 13.9×; Amritsar 2.6×, Ludhiana 1.2×. At its own 2020-21 rate,
+Sangrur's 3,198 km² would have raised ~10,900 alerts; it raised 531.
+
+### Tried and dropped
+
+- **Geostationary fire data for India via FIRMS**: not available. The API offers GOES
+  only, which covers the Americas.
+- **Sentinel-2 dNBR as an independent check**: harvest and burning both darken the
+  field, so it cannot separate the two without labelled fields.
+- **Burned area as the attribution input**: daily MCD64A1 burn-date area over the box
+  against NCR daily PM2.5, 25 Oct - 20 Nov 2025: r = **−0.655** (same 48 h), −0.57/−0.48/−0.42
+  at 1-3 day lags. Detections over the same box: −0.02, +0.23/+0.36/+0.40. The negative
+  sign is most likely the smoke itself: burn dates are assigned from surface reflectance,
+  which the haze hides on the smoggiest days. Not usable day-to-day; **attribution keeps
+  using detections, and so undercounts recent seasons' burning.**
+
+### Limits
+
+MCD64A1 is seeded by MODIS active fires, so fires after the overpass can be under-mapped
+too; the true undercount is likely larger. Its Punjab 2025 total (8,965 km²) is below
+iFOREST's Sentinel-2 ~20,000 km². GAUL 2015 boundaries fold Barnala into Sangrur and
+Malerkotla into its parents. Ratios for districts under 50 baseline detections or 25 km²
+burned are withheld.
+
+---
+
 ## FINDING 2026-09-15 — our headline hotspot was a broken sensor
 
 Found while researching what a pollution control board actually needs. The hourly

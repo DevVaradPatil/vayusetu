@@ -580,6 +580,37 @@ button { font: inherit; color: inherit; }
 .mon-cell--ref { background: transparent; color: var(--on-surface-dim); }
 .mon-cell--at { outline: 2px solid var(--primary); outline-offset: -2px; font-weight: 700; }
 
+/* ── Farm fire ledger ─────────────────────────────────────────────────────── */
+
+.ff-states { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; margin-top: 14px; }
+.ff-state {
+  display: grid; gap: 8px; min-width: 0; padding: 12px 14px;
+  border: 1px solid var(--outline-variant); border-radius: var(--r-small); background: var(--surface-container-lowest);
+}
+.ff-sub { font-size: 15.5px; font-weight: 600; }
+.ff-lede { font-size: 14.5px; line-height: 1.5; }
+.ff-bars { display: grid; gap: 4px; }
+.ff-bar-row { display: grid; grid-template-columns: 40px 1fr 1fr; gap: 8px; align-items: center; font-size: 12.5px; }
+.ff-year { color: var(--on-surface-variant); }
+.ff-bar-cell { position: relative; display: flex; align-items: center; min-height: 20px; padding-left: 6px; }
+.ff-bar-cell .num { position: relative; white-space: nowrap; }
+.ff-bar { position: absolute; inset: 0 auto 0 0; border-radius: 3px; opacity: 0.35; }
+.ff-bar--land { background: var(--fire); }
+.ff-bar--alerts { background: var(--outline); }
+.ff-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 18px; }
+.ff-table-wrap { overflow-x: auto; margin-top: 10px; }
+.ff-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.ff-table th, .ff-table td { padding: 7px 10px; border-bottom: 1px solid var(--outline-variant); text-align: left; white-space: nowrap; }
+.ff-table thead th { font-size: 12.5px; font-weight: 600; color: var(--on-surface-variant); }
+.ff-table .num { text-align: right; }
+.ff-table tbody th { font-weight: 600; }
+.ff-state-tag { margin-left: 6px; font-size: 11.5px; font-weight: 400; color: var(--on-surface-dim); }
+.ff-row--hidden th { box-shadow: inset 4px 0 0 var(--fire); }
+.ff-factor { display: inline-block; min-width: 3.2em; padding: 1px 6px; border-radius: var(--r-pill); background: var(--surface-container-high); font-weight: 700; text-align: center; }
+.ff-factor--big { background: var(--error-container); color: var(--on-error-container); }
+.ff-na { color: var(--on-surface-dim); }
+.ff-caveats { display: grid; gap: 4px; margin-top: 14px; padding-left: 18px; font-size: 13.5px; color: var(--on-surface-variant); line-height: 1.5; }
+
 /* ── Hotspot confirmation ─────────────────────────────────────────────────── */
 
 .hs-confirm { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; }

@@ -338,6 +338,40 @@ export const fetchMonitorHealth = (ts: string, days = 7) =>
 
 export const fetchCases = () => get<CaseQueue>(`/api/v1/${TENANT}/cases`);
 
+export interface FireSeason {
+  season: number;
+  burned_km2: number;
+  day_detections: number;
+  night_detections: number;
+  km2_per_detection: number | null;
+}
+
+export interface FireDistrict {
+  state: string;
+  district: string;
+  burned_km2: number;
+  day_detections: number;
+  night_detections: number;
+  km2_per_detection: number | null;
+  baseline_km2_per_detection: number | null;
+  undercount_factor: number | null;
+  alerts_expected_at_baseline: number | null;
+  rank_by_detections: number;
+  rank_by_burned_area: number;
+}
+
+export interface FireLedger {
+  season: number;
+  seasons: number[];
+  baseline_seasons: number[];
+  trend: Record<string, FireSeason[]>;
+  districts: FireDistrict[];
+  sources: Record<string, string>;
+  caveats: string[];
+}
+
+export const fetchFireLedger = () => get<FireLedger>(`/api/v1/${TENANT}/fires/ledger`);
+
 export const previewCases = (ts: string) => get<CasePreview>(`/api/v1/${TENANT}/cases/preview?${q(ts)}`);
 
 const post = async <T>(path: string, body?: FormData): Promise<T> => {

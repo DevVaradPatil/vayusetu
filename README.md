@@ -22,6 +22,7 @@ VayuSetu answers the three questions that follow the number:
 | *Where is it worst, far beyond the average?* | Each monitor against the robust median of the monitors around it |
 | *Why?* | NASA FIRMS fire detections, sectored by ERA5 wind; boundary layer height |
 | *Who should act, and how urgently?* | Gemini, reasoning over the measured evidence |
+| *Are the fire counts still telling the truth?* | MODIS burn scars against VIIRS fire alerts, per Punjab and Haryana district, each against its own 2020-21 rate |
 | *Who owns it, by when — and was it really fixed?* | Cases routed to the responsible agency with deadlines; closure needs a Gemini-checked site photo **and** measurements showing the problem gone |
 
 It then says it again, in the resident's own language.
@@ -87,6 +88,25 @@ every monitor severe together, no local outlier. That is the correct answer, and
 page says so instead of showing an empty table: a regional blanket needs a region-wide
 response, a local plume needs an inspection team at one address.
 
+### The fires the count stopped seeing
+
+Stubble burning is policed by fire counts, and fire counts come from satellites that pass
+over Punjab around midday. Farmers have learned to burn after they pass. So we measured the
+burning a second way, with burn scars, which do not care what time a field burned:
+
+| Punjab, Oct-Nov | 2020 | 2025 |
+|---|---|---|
+| Fire alerts (VIIRS, daytime) | 74,975 | 3,936 — **−95%** |
+| Land burned (MODIS burn scars) | 17,565 km² | 8,965 km² — **−49%** |
+| Land burned per alert | 0.23 km² | **2.28 km², 10×** |
+
+The gap is uneven, which is what makes it useful. In 2025 **Amritsar had the most fire
+alerts of any district and ranked 10th by land burned. Sangrur ranked 3rd by alerts and
+1st by land**, burning 20.5× more land per alert than it did in 2020-21; at its old rate
+it would have raised ~10,900 alerts, not 531. An inspection plan built on counts goes to
+the wrong districts. The **Farm fires** desk shows both rankings side by side
+([`ingestion/fire_ledger.py`](ingestion/fire_ledger.py)).
+
 ---
 
 ## What we learned by testing our own idea
@@ -105,6 +125,7 @@ We tested it properly, and it does not hold on this data:
 | 72-hour forecaster beats diurnal persistence | **No.** Loses at every horizon (-5.5% to -59.9%) |
 | Day-ahead Severe-night warning beats the calendar | **No.** "Warn after 6 November" scores +0.71; the best weather rule, +0.61 |
 | The top-ranked hotspot is real pollution | **No.** It was a faulty monitor; 22 of the top 40 were. Every reading is now integrity-checked |
+| Daily burned area explains Delhi's PM2.5 better than fire alerts | **No.** r = −0.66: smoke hides the burn scars on the worst days. Used for the district ledger only |
 | **Upwind fires + boundary layer explain the episodes** | **Yes.** r = **+0.55** and **-0.42** |
 
 Full evidence, including the numbers that killed each hypothesis, is in
@@ -291,6 +312,13 @@ a call.
 **Source attribution is a wind-sector cone, not trajectory modelling.** A 30-degree
 half-angle cone, 100 km upwind. That is not HYSPLIT; multi-day and vertically complex
 transport are out of its reach, and the prompt forbids describing it otherwise.
+
+**Attribution counts fire alerts, and fire alerts now miss most of the burning.** The
+upwind-fire evidence uses VIIRS detections, which undercount Punjab's 2025 burning about
+10× against 2020-21. Burned area could not replace them day to day (it correlates
+negatively with PM2.5, because smoke hides the scars), so recent seasons' fire share is
+likely understated. The district ledger's figures are relative indicators, not hectares:
+500 m burn scars sit below Sentinel-2 estimates, and district boundaries are from 2015.
 
 **The demo is a replay, and says so.** The hero window is 10–13 November 2025, a real
 Severe episode with 68 of ~70 stations reporting. The same pipeline running live today

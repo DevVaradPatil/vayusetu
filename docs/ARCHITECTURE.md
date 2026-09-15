@@ -530,6 +530,7 @@ own (rule R4), and the resident page tells people so.
 | `POST /api/v1/{tenant}/cases/raise?ts=` | Open them, never duplicating open work |
 | `POST /api/v1/{tenant}/cases/{id}/acknowledge?actor=` | Take ownership, as a named demo account |
 | `POST /api/v1/{tenant}/cases/{id}/close` (multipart) | Photo + note + location; closes only if the evidence and the measurements agree |
+| `GET /api/v1/{tenant}/fires/ledger?season=` | Per district: land burned vs fire alerts against its own 2020-21 rate, both ranks (§6b) |
 
 Two design decisions:
 
@@ -673,6 +674,54 @@ a diff.
 
 Writes use `MERGE`/`UPDATE` DML, not the streaming API: streamed rows cannot be updated
 for up to 30 minutes, and acting on a case seconds after it opens is the normal case.
+
+---
+
+## 6b. Farm fires: where fire counts stop telling the truth
+
+**Files: `ingestion/fire_ledger.py` (batch), `api/fires.py`, `web/src/components/FarmFires.tsx`.**
+
+Fire counts are the number India's stubble-burning response is run on: district targets,
+enforcement drives, progress claims. They come from polar-orbiting satellites that pass
+over Punjab and Haryana around 10:30-13:30. Farmers now burn later: an iFOREST analysis of
+geostationary data found 90% of large Punjab fires in 2024-25 were set after 3 PM, against
+3% in 2021. A falling count therefore no longer means less burning.
+
+The ledger measures it with a second, independent satellite product. Burn scars (MODIS
+MCD64A1, 500 m) show a field burned whatever the hour. Per district per season, it counts
+land burned against VIIRS daytime detections, and compares each district with **its own
+2020-21 seasons**. Both products have biases, and a same-place ratio cancels the ones that
+do not change year to year.
+
+| Punjab | 2020 | 2025 |
+|---|---|---|
+| Daytime detections | 74,975 | 3,936 (−95%) |
+| Land burned | 17,565 km² | 8,965 km² (−49%) |
+| km² per detection | 0.23 | **2.28 (10×)** |
+
+It is useful because the gap is uneven. In 2025 Amritsar had the most detections of any
+district and ranked 10th by land burned; Sangrur ranked 3rd by detections and 1st by land,
+with 20.5× more land per alert than its baseline. An inspection plan ordered by fire
+counts goes to the wrong districts. The table shows both ranks side by side, the ratio,
+and how many alerts the burning would have raised at the district's old rate.
+
+**Why a batch job.** The ledger is recomputed from archives (about 70 FIRMS requests and
+six Earth Engine reductions, ~10 minutes) and written with `WRITE_TRUNCATE`. The service
+only reads 216 rows, so Cloud Run needs no Earth Engine client or geometry library.
+
+**What was tried and dropped** (details in `TODO.md`, 2026-09-15b):
+
+- Geostationary detections for India are not in the FIRMS API, which serves GOES (the
+  Americas) only.
+- Sentinel-2 dNBR cannot tell a harvested field from a burned one without labels.
+- Daily burned area as the attribution input correlates **negatively** with Delhi PM2.5
+  (r = −0.655), most likely because the smoke hides the burn scars on the worst days. So
+  the attribution in §4 keeps using detections, and undercounts recent seasons.
+
+**Limits.** Relative indicators, not hectares: Punjab's 2025 total is below Sentinel-2
+estimates (~20,000 km²), and MCD64A1 is seeded by MODIS active fires, so the true gap is
+probably larger. Boundaries are GAUL 2015 (Barnala inside Sangrur). Ratios are withheld
+for districts with under 50 baseline detections or 25 km² burned.
 
 ---
 
@@ -837,6 +886,7 @@ and Cloud Run swallowing `/healthz`) are in `docs/DEPLOYMENT.md`.
 | `api/alerts.py` | What an hour's trusted measurements justify (§6a) |
 | `api/cases.py` | Case routing, deadlines, closure policy and outcome checks (§6a) |
 | `api/gemini/closure.py` | Gemini's description of a closure photo — describes, never decides (§6a) |
+| `ingestion/fire_ledger.py`, `api/fires.py` | Burn scars against fire alerts per district, and the ledger read by the desk (§6b) |
 | `api/gemini/brief.py` | Prompt, response schema, and the R5 verifier |
 | `api/gemini/advisory.py` | Translation into ten languages |
 | `api/routes_episode.py` | The product's endpoints, caching and generation lock |
@@ -866,6 +916,9 @@ about what it does not know.
   real, correctly-signed relationship with a clear physical mechanism. It is not a
   source-apportionment study.
 - **The upwind cone is not trajectory modelling.** ±30°, 100 km, straight-line.
+- **Attribution counts fire detections, which undercount recent burning** about 10× in
+  Punjab (§6b). Burned area could not replace them day to day. The 2025 season's fire
+  contribution is likely understated.
 - **Hotspots are hidden by the average, not hidden from the network.** The detector
   compares monitors against monitors, so it can only flag a place that already has one.
   Finding an unmonitored hotspot needs the satellite detector we deleted (§4a), and that

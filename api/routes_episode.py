@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Query, 
 from api import evidence as evidence_mod
 from api import alerts as alerts_mod
 from api import cases as cases_mod
+from api import fires as fires_mod
 from api import hotspots as hotspots_mod
 from api import integrity as integrity_mod
 
@@ -232,6 +233,22 @@ def get_monitor_health(
     """
     at = _parse_ts(ts) if ts else None
     return integrity_mod.network_health(tenant, at=at, days=days)
+
+
+@router.get("/{tenant}/fires/ledger", summary="Districts where fire alerts undercount the burning")
+def get_fire_ledger(
+    tenant: str,
+    season: Optional[int] = Query(None, ge=2020, le=2100, description="Default: latest season"),
+) -> Dict[str, Any]:
+    """
+    Burned land (MODIS burn scars) against satellite fire alerts per Punjab and Haryana
+    district, each compared with its own 2020-21 seasons. Shared across tenants: the fields
+    burn upwind of every city in the plains.
+    """
+    try:
+        return fires_mod.ledger(season)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @router.get("/{tenant}/cases", summary="The case queue: who owns what, by when, and was it really fixed")

@@ -35,6 +35,7 @@ google-genai>=1.0                   # Gemini. NOT google-generativeai — that p
 google-cloud-translate>=3.15
 google-cloud-texttospeech>=2.16
 earthengine-api>=0.1.395           # MAIAC AOD, Sentinel-5P, ERA5, WorldCover, GHSL
+shapely>=2.0            # ingestion/fire_ledger.py point-in-polygon; not needed by the API
 httpx>=0.27                        # OpenAQ, FIRMS, Open-Meteo
 tenacity>=8.2                      # retry/backoff in ingestion/common.py
 structlog>=24.1                    # JSON logging to stdout for Cloud Run

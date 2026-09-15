@@ -61,6 +61,14 @@ export const EXPLAIN = {
     'severe smog. The first three mean the instrument is faulty, and its readings are left ' +
     'out. The last is only a reason to inspect the site — a monitor can genuinely sit in a ' +
     'cleaner pocket. Thresholds were set from 35,602 real readings, not guessed.',
+  fireLedger:
+    'Two NASA satellite products, per district, 1 October to 30 November. Fire alerts are ' +
+    'VIIRS detections, taken around 1:30 PM, the kind of count official fire tallies use. ' +
+    'Land burned is MODIS burn scars, 500 m pixels, which stay visible whatever time the ' +
+    'field burned. Each district is compared with its own 2020–21 seasons, so the numbers ' +
+    'are a change against itself, not exact hectares. The alerts column shows how many ' +
+    'alerts that much burning would have raised back then. Districts with too few fires to ' +
+    'compare show a dash.',
   cases:
     'A case is raised only from trusted measurements: a confirmed local event, a broken or dark ' +
     'monitor, or the whole region in the Severe band. Each goes to the agency responsible, read ' +

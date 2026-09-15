@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Broadcast, ClockCounterClockwise, Compass, Fire, FolderOpen, Pulse, Question, Warning } from '@phosphor-icons/react';
 import CaseDesk from './CaseDesk';
+import FarmFires from './FarmFires';
 import BriefPanel from './BriefPanel';
 import Guide from './Guide';
 import Hotspots from './Hotspots';
@@ -33,10 +34,11 @@ import { compassWords, EXPLAIN, inkOn } from '../lib/plain';
  * Sections of the officials desk, as hash routes so a link can point at one. The "now"
  * section stays mounted while another is shown: every new Google map is a billed load.
  */
-type Section = 'now' | 'monitors' | 'cases';
+type Section = 'now' | 'monitors' | 'cases' | 'fires';
 const readSection = (): Section => {
   const h = window.location.hash;
-  return h.startsWith('#/monitors') ? 'monitors' : h.startsWith('#/cases') ? 'cases' : 'now';
+  return h.startsWith('#/monitors') ? 'monitors' : h.startsWith('#/cases') ? 'cases'
+    : h.startsWith('#/fires') ? 'fires' : 'now';
 };
 
 const GUIDE_KEY = 'vayusetu-guide-hidden';
@@ -80,6 +82,7 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
   const [section, setSection] = useState<Section>(readSection);
   const [opened, setOpened] = useState<Record<Section, boolean>>(() => ({
     now: true, monitors: readSection() === 'monitors', cases: readSection() === 'cases',
+    fires: readSection() === 'fires',
   }));
 
   useEffect(() => {
@@ -150,6 +153,9 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
           <a className="tab" href="#/cases" aria-current={section === 'cases' ? 'page' : undefined}>
             <FolderOpen size={18} /> Cases
           </a>
+          <a className="tab" href="#/fires" aria-current={section === 'fires' ? 'page' : undefined}>
+            <Fire size={18} /> Farm fires
+          </a>
         </div>
       </nav>
 
@@ -161,6 +167,11 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
       {opened.cases && (
         <div className="desk-section" hidden={section !== 'cases'}>
           <CaseDesk ts={ts} />
+        </div>
+      )}
+      {opened.fires && (
+        <div className="desk-section" hidden={section !== 'fires'}>
+          <FarmFires />
         </div>
       )}
 
