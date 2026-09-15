@@ -81,6 +81,67 @@ enabled, all three datasets and 16 tables created, and real data landed.
 
 ---
 
+## FINDING 2026-09-15 — our headline hotspot was a broken sensor
+
+Found while researching what a pollution control board actually needs. The hourly
+series behind "Arya Nagar, Bahadurgarh — 918 µg/m³" on 16 Nov 2025 runs:
+
+```
+UTC   19   20   21   22   23   00   01   02   03   04   05   06   07   08   09   10   11
+PM25 717   31  559   33  500    0   44  886  442    4   50  918   19  557    0    0    0
+```
+
+while every monitor within 25 km held steady near 250-300. PM2.5 does not do that. It
+was the README headline, the submission description, the video script, the alert demo —
+and, one step further, **the anchor of the hero attribution brief**: at 12 Nov 01:30 IST
+the "worst monitor" was Arya Nagar at 768.9, inside 642, 161, 587, 769, 0, 741.
+
+### How big the problem was
+
+- Of the top 40 events `api/hotspots.top_events` ranked, **22** had near-zero readings
+  or median hourly jumps ≥ 120 µg/m³ within ±6 h.
+- Flatlines: Alipur 29 h at exactly 161.0; Teri Gram 18 h at 0.0; Manesar 11 h at 240.2;
+  Arya Nagar 27 h at 27.9 on 5 Nov. Zero readings at DTU and Sirifort during
+  regional-Severe hours.
+- External corroboration: Newslaundry reported Gurugram Teri Gram "non-functional since
+  January"; our checks independently mark it offline with 61 dead-zero hours.
+
+### What changed — `api/integrity.py`
+
+Four checks with thresholds set from the distribution of 35,602 station-hours:
+`stuck` (3+ identical hours; runs fall from 302 at 2 h to 8 at 3 h), `dead_zero`
+(< 5 while median ≥ 60; bimodal), `spike` (±200 in one hour; 99% of changes < 161),
+`low_in_episode` (z ≤ −3.5 during Severe; suspicion only). A reading is trusted when no
+fault flag sits within ±3 h at that monitor.
+
+| | Before | After |
+|---|---|---|
+| Hotspot outliers | 251 station-hours, 48 localities (248 on the gated run) | 197 trusted, **51 refused as faults** |
+| Confirmed events (≥ 2 h, distinct values) | — | **111 event-hours, 26 localities, 21 days** |
+| Headline local event | Arya Nagar 918 (fault) | **NSIT Dwarka 629 → 507 vs 123, 3 h, ~24,500 people** |
+| Hero worst monitor | Arya Nagar 768.9 (fault) | **Rohini 710** |
+| Hero city mean / BLH / wind / upwind fires | 406.6 / 65 m / 338° / 35 | **407.3 / 110 m / 325° / 33** |
+| Daily r (upwind fires, BLH) | +0.579 / −0.481 | **+0.572 / −0.483** — the attribution finding survives |
+
+Also: a confirmed event now needs two consecutive hours with *distinct* values —
+Mandir Marg's 472.0, 472.0, 120 would otherwise have confirmed itself. Local alerts fire
+only on confirmed events. The five alerts already in the shared inbox, including two
+raised on Arya Nagar, were deleted.
+
+### Why this is the product, not just a fix
+
+In 2025 only 270 of India's 562 real-time monitors gave stable data; 13 of Haryana's 31
+went dark as the smog built; Panipat read a flat 183-187 for ten days. Every system that
+turns monitor readings into action will send people to broken boxes without a gate like
+this. Monitor health is now a first-class output (`GET /monitors/health`), and the start
+of the action desk: a faulty monitor is a maintenance ticket.
+
+**Limits.** Catches faults, not bias: smooth calibration drift or a monitor reading
+somewhat low under trees or a water tanker passes. The 14-day baseline in
+`api/evidence.py` still averages all readings.
+
+---
+
 ## FINDING 2026-09-12b — day-ahead early warning is NOT supportable on 26 nights
 
 Third falsification, and the same structural trap as Model B. The track asks us to

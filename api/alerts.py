@@ -102,7 +102,9 @@ def evaluate(ts_str: str, tenant: str = "ncr",
     hour = ts_str
     candidates: List[Dict[str, Any]] = []
 
-    for h in hs["hotspots"]:
+    # Confirmed only: a trusted reading that persisted. A one-hour outlier is listed on
+    # the hotspots panel but never dispatches anyone (api/hotspots.py CONFIRM_HOURS).
+    for h in (x for x in hs["hotspots"] if x["confirmed"]):
         sev = _local_severity(h["pm25"], h["times_regional"])
         where = h["name"].rsplit(" - ", 1)[0]
         candidates.append({
@@ -363,16 +365,21 @@ def demo() -> None:
         assert not any(ch.isdigit() for ch in name), f"{name} looks like it carries a number"
         assert name.startswith("Demo:"), name
 
-    local = evaluate("2025-11-16 06:00:00")
-    print(f"16 Nov 11:30 IST — {len(local['candidates'])} alert(s)")
+    local = evaluate("2025-10-30 08:00:00")
+    print(f"30 Oct 13:30 IST — {len(local['candidates'])} alert(s)")
     for c in local["candidates"]:
         print(f"  [{c['severity']:9s}] {c['headline']}")
         print(f"              to: {', '.join(MOCK_RECIPIENTS[r] for r in c['recipients'])}")
-    kinds = {c["trigger_kind"] for c in local["candidates"]}
-    assert "hyper_local_event" in kinds, "a known local event must raise a local alert"
-    worst = max(local["candidates"], key=lambda c: c["observed_pm25"])
-    assert worst["severity"] == "emergency", worst
-    assert worst["evidence"]["times_regional"] >= EMERGENCY_RATIO
+    dwarka = [c for c in local["candidates"] if c["location_name"].startswith("NSIT Dwarka")]
+    assert dwarka, "a confirmed local event on a healthy monitor must raise a local alert"
+    assert dwarka[0]["severity"] == "emergency", dwarka  # 507 at 4.1x its surroundings
+
+    # The broken sensor and the one-hour blip raise nothing locally.
+    faulty = evaluate("2025-11-16 06:00:00")
+    print(f"\n16 Nov 11:30 IST — {len(faulty['candidates'])} alert(s) "
+          "(Arya Nagar 918 is a sensor fault; Mandir Marg 472 is one unconfirmed hour)")
+    assert not [c for c in faulty["candidates"] if c["trigger_kind"] == "hyper_local_event"], \
+        "a faulty sensor or an unconfirmed hour must never dispatch anyone"
 
     regional = evaluate("2025-11-11 20:00:00")
     print(f"\n12 Nov 01:30 IST — {len(regional['candidates'])} alert(s)")
@@ -388,7 +395,7 @@ def demo() -> None:
     assert quiet["no_trigger_reason"], "silence has to come with a reason"
 
     # Ids are deterministic, so a second scan of the same hour cannot duplicate.
-    again = evaluate("2025-11-16 06:00:00")
+    again = evaluate("2025-10-30 08:00:00")
     assert ([c["alert_id"] for c in local["candidates"]]
             == [c["alert_id"] for c in again["candidates"]]), "ids must be stable"
 

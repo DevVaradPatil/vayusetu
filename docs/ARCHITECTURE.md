@@ -92,8 +92,8 @@ can resolve.
 ### 2.4 The pivot
 
 Attribution survived because **it never needed to beat a statistical baseline to be
-useful.** Nobody has a baseline that says "35 fires are burning 8 km upwind of your
-worst station under a 65 m inversion." It is also the half no AQI app offers.
+useful.** Nobody has a baseline that says "33 fires are burning 8 km upwind of your
+worst station under a 110 m inversion." It is also the half no AQI app offers.
 
 So the product became attribution-first. The ML harnesses stay in the repository so
 the result is reproducible, but **no residual map, no forecast and no predictive warning
@@ -195,7 +195,7 @@ Two variables carry the physics:
 - **`blh`** — boundary layer height in metres. This is the depth of the atmosphere
   that pollution mixes into. When it collapses below ~200 m, the same emissions are
   concentrated into a fraction of the volume, and concentrations multiply *without any
-  change in emissions.* In the hero episode it is **65 m**.
+  change in emissions.* In the hero episode it is **110 m**.
 
 ### Step 3 — Which fires could actually have reached here
 
@@ -222,14 +222,14 @@ This is the attribution step. For every fire detected in the previous **48 hours
    official can judge whether the smoke has plausibly arrived yet.
 
 ```
-                    ↑ wind FROM 338°
+                    ↑ wind FROM 325°
               ╲     │     ╱
                ╲  fires  ╱     ← ±30° cone, out to 100 km
                 ╲   ·   ╱
                  ╲ · · ╱
                   ╲ · ╱
                    ╲ ╱
-                    ●  worst station (768.9 µg/m³)
+                    ●  worst trusted station (710 µg/m³)
 ```
 
 > **This is a wind-sector cone, not back-trajectory modelling.** It is not HYSPLIT.
@@ -253,23 +253,27 @@ conflating them is how a system quietly lies.
 {
   "tenant": "ncr",
   "ts": "2025-11-11T20:00:00+00:00",
-  "city_pm25": 406.6,
+  "city_pm25": 407.3,
   "aqi_band": "Severe",
-  "n_stations_reporting": 65,
-  "worst_station": { "name": "Arya Nagar, Bahadurgarh - HSPCB",
-                     "pm25": 768.9, "lat": 28.6701, "lon": 76.9254 },
-  "wind": { "from_bearing_deg": 338.0, "speed_ms": 2.06 },
-  "boundary_layer_m": 65.0,
-  "upwind_fires": { "count": 35, "total_fires_within_radius": 71,
-                    "nearest_km": 8.3, "sector_deg": 30.0,
+  "n_stations_reporting": 63,
+  "monitors_excluded_as_faulty": ["Arya Nagar, Bahadurgarh - HSPCB", "Sirifort, Delhi - CPCB"],
+  "worst_station": { "name": "Rohini, Delhi - DPCC",
+                     "pm25": 710.0, "lat": 28.7325, "lon": 77.1199 },
+  "wind": { "from_bearing_deg": 325.0, "speed_ms": 2.25 },
+  "boundary_layer_m": 110.0,
+  "upwind_fires": { "count": 33, "total_fires_within_radius": 68,
+                    "nearest_km": 7.9, "transport_time_h": 9.4, "sector_deg": 30.0,
                     "radius_km": 100.0, "window_h": 48 },
-  "comparison": { "baseline_14d_mean_pm25": 176.7, "ratio_to_baseline": 2.3 },
-  "population_exposed": 2038,
+  "comparison": { "baseline_14d_mean_pm25": 176.7, "ratio_to_baseline": 2.31 },
+  "population_exposed": 24013,
   "missing_fields": []
 }
 ```
 
-Every one of those numbers came out of a query.
+Every one of those numbers came out of a query, and only trusted readings reach it.
+Until September 2026 this example read `"worst_station": "Arya Nagar ... 768.9"`,
+`"boundary_layer_m": 65.0` and 35 upwind fires: the whole analysis was anchored on a
+faulty monitor whose surrounding hours ran 642, 161, 587, 769, 0, 741 (§4b).
 
 ---
 
@@ -294,18 +298,35 @@ is flagged at `z ≥ 3.5` **and** at least 50 µg/m³ above the median **and** r
 least 90 µg/m³ — the two absolute floors stop a clean day producing "hotspots" that are
 20 µg/m³ above a very low median.
 
-Measured over the 26-day window that rule fires on **251 station-hours across 48
-localities on all 26 days**, so it is neither vacuous nor indiscriminate. The sharpest:
+Two further conditions, both added after the first version ranked broken instruments
+as its worst events: the reading must pass the integrity gate (§4b), and an event is
+**confirmed** only when the same monitor was a trusted outlier for at least **two
+consecutive hours** with distinct values. Single-hour outliers are listed as unconfirmed
+and never raise an alert.
 
-| Hour (IST) | Locality | Reading | Regional median | Ratio |
-|---|---|---|---|---|
-| 16 Nov 13:30 | Arya Nagar, Bahadurgarh | 557 | 105 | 5.3× |
-| 16 Nov 11:30 | Arya Nagar, Bahadurgarh | **918** | 207 | 4.4× |
-| 31 Oct 13:30 | CRRI Mathura Road | 589 | 93 | **6.3×** |
-| 7 Nov 17:30 | NISE Gwal Pahari, Gurugram | 471 | 92 | 5.1× |
+| | Station-hours |
+|---|---|
+| Statistical outliers (the rule alone) | 248 |
+| Refused as sensor faults | **51** |
+| Trusted | 197 |
+| **Confirmed (≥ 2 h)** | **111**, in 26 localities on 21 days |
 
-That top row is the whole argument for the feature: the regional figure said 105 while
-one town breathed 557.
+The sharpest confirmed events:
+
+| Hour (IST) | Locality | Reading | Regional median | Ratio | Hours |
+|---|---|---|---|---|---|
+| 4 Nov 18:30 | Sector-51, Gurugram | 370 | 70 | 5.3× | 4 |
+| 30 Oct 13:30 | NSIT Dwarka, Delhi | **507** (629 the hour before) | 123 | 4.1× | 3 |
+| 28 Oct 05:30 | Arya Nagar, Bahadurgarh | 462 | 146 | 3.2× | 2 |
+| 8 Nov 12:30 | Sector 62, Noida | 594 | 191 | 3.1× | 2 |
+
+Arya Nagar appears here on 28 October, before its instrument started failing: the gate
+judges readings, not monitors, so a monitor is not blacklisted for faults on other days.
+
+> **What this table used to say.** The first version's top rows were *Arya Nagar 918 vs
+> 207* and *CRRI Mathura Road 589 vs 93*. Both are gone: Arya Nagar's hours that morning
+> ran 717, 31, 559, 33, 500, 0, 886, 4, 918, 19, 557, 0, 0, 0, and CRRI had zeros within
+> three hours. The detector was ranking faults as the worst pollution in the region.
 
 ### Reporting nothing is a result
 
@@ -333,6 +354,66 @@ A detector that cannot separate a plume from a region-wide day, and cannot rule 
 retrieval artefact, has no business telling an officer where to go. It was deleted
 rather than tuned into looking like it worked. The honest consequence is stated in §12:
 **this finds hotspots hidden by the average, not hotspots hidden from the network.**
+
+---
+
+## 4b. Can the monitor be trusted? The integrity gate
+
+**File: `api/integrity.py`.**
+
+Every hotspot, alert and brief starts from one number on one monitor, so this runs
+before all of them. It is also useful on its own: a monitor that is broken, dark, or
+reading implausibly is something a pollution control board has to act on.
+
+**Why it exists.** Measured in our data, and reported nationally:
+
+- Our first hotspot headline, and the anchor of our hero AI brief, was a faulty monitor
+  (§4a). 22 of the top 40 first-ranked events had faults nearby.
+- In 2025 only **270 of India's 562** real-time monitors gave stable data (Airvoice);
+  **40%** of districts have no government monitor at all.
+- **13 of Haryana's 31** stations went dark as October 2025's smog built, including
+  Gurugram Teri Gram, "non-functional since January" (Newslaundry). Our checks
+  independently mark Teri Gram offline with 61 dead-zero hours.
+- Panipat's monitor read a flat **183-187 for ten days** while neighbouring districts
+  were Severe (The Tribune); water tankers were filmed spraying around the Anand Vihar
+  monitor (Newslaundry). The CAG found monitors sited near trees and roads.
+
+**The checks.** Each is a pattern real hourly PM2.5 does not produce. Thresholds come
+from the distribution of 35,602 station-hours, not from intuition:
+
+| Flag | Rule | Measured basis |
+|---|---|---|
+| `stuck` | Same value (±0.05) for 3+ consecutive hours | Runs: 34,875 of 1 h, 302 of 2 h, then 8 of 3 h — a clean break |
+| `dead_zero` | Below 5 µg/m³ while the regional median ≥ 60 | 310 readings below 2, only 36 more up to 10 — bimodal |
+| `spike` | Up ≥ 200 from the previous hour **and** down ≥ 200 to the next | 39 cases; 99% of hourly changes are under 161 |
+| `low_in_episode` | Robust z ≤ −3.5 while the regional median ≥ 250 | The sprinkler / bad-siting signature — a suspicion, not proof |
+
+A reading is **trusted** when no fault flag (the first three) appears at that monitor
+within ±3 hours. `low_in_episode` never distrusts a reading; it marks the monitor for
+inspection, because a monitor in a genuinely cleaner pocket can read low.
+
+**Monitor status**, over a chosen window (`GET /api/v1/{tenant}/monitors/health`):
+
+| Status | Rule | Action it implies |
+|---|---|---|
+| `faulty` | Fault flags on ≥ 5% of reported hours | Send the maintenance contractor |
+| `offline` | Reported < 50% of expected hours | The monitor is dark |
+| `suspect` | 2+ hours far below neighbours during Severe | Inspect siting and surroundings |
+| `healthy` | Otherwise | — |
+
+Over the full window: 4 faulty (Arya Nagar 25% of hours; Manesar stuck at 240.2; Alipur
+stuck at 161.0 for 29 h; Chandni Chowk runs of zeros), 5 offline, 61 healthy. Each
+status carries one stretch of raw readings as evidence, so a claim that a government
+monitor is broken can be checked by eye before anyone acts on it.
+
+**Does the core finding survive?** Yes. Recomputed on trusted readings only, daily PM2.5
+correlates **+0.572** with upwind fires and **−0.483** with boundary layer height,
+against +0.579 and −0.481 on all readings.
+
+**Limits.** These checks catch faults, not bias. Smooth calibration drift, or a monitor
+reading somewhat low because of trees or a water tanker, passes; `low_in_episode` only
+catches the extreme case. The whole window is flagged in memory once per process, which
+suits a replay; live ingestion would flag each hour as it lands.
 
 ---
 
@@ -397,7 +478,7 @@ Gujarati, Kannada, Malayalam and Punjabi. If translation fails, the whole page c
 in English marked `translated: false`, never a mix.
 
 The "why" sentences are not generated. They are templates filled with measured values
-("smoke from 35 fires spotted by satellites is blowing in from the north") with coarse
+("smoke from 33 fires spotted by satellites is blowing in from the north-west") with coarse
 thresholds, so the simplest explanation on the site is the one we can defend line by line.
 
 `/advisory?audio=true` returns the advice spoken by Cloud Text-to-Speech, in the language
@@ -443,6 +524,7 @@ own (rule R4), and the resident page tells people so.
 | `GET /api/v1/{tenant}/event?ts=` | The episode in the **open interchange format** (§8) |
 | `GET /api/v1/{tenant}/hotspots?ts=` | Hyper-local events for one hour, plus the whole field they stand out from |
 | `GET /api/v1/{tenant}/hotspots/top?limit=` | The sharpest local events in the window, ranked, each with its hour |
+| `GET /api/v1/{tenant}/monitors/health?ts=&days=` | Every monitor: faulty, offline, suspect or healthy, with evidence |
 | `GET /api/v1/{tenant}/alerts?status=` | The mock alert inbox |
 | `GET /api/v1/{tenant}/alerts/preview?ts=` | What this hour would raise — **writes nothing** |
 | `POST /api/v1/{tenant}/alerts/dispatch?ts=` | Raise them, idempotently |
@@ -684,6 +766,7 @@ and Cloud Run swallowing `/healthz`) are in `docs/DEPLOYMENT.md`.
 |---|---|
 | `api/evidence.py` | **The core.** Evidence assembly, upwind geometry, event rendering |
 | `api/hotspots.py` | Hyper-local event detection, measurement only (§4a) |
+| `api/integrity.py` | Per-reading integrity checks and monitor status (§4b) |
 | `api/alerts.py` | Alert triggers on observed conditions, mock-only dispatch (§6a) |
 | `api/gemini/brief.py` | Prompt, response schema, and the R5 verifier |
 | `api/gemini/advisory.py` | Translation into ten languages |

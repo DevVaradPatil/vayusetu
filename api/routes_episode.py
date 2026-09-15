@@ -32,6 +32,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from api import evidence as evidence_mod
 from api import alerts as alerts_mod
 from api import hotspots as hotspots_mod
+from api import integrity as integrity_mod
 
 logger = logging.getLogger("vayusetu.api.episode")
 
@@ -215,6 +216,21 @@ def get_top_events(
 ) -> Dict[str, Any]:
     """Where the worst hyper-local events have been, so the console can jump to one."""
     return hotspots_mod.top_events(tenant, limit)
+
+
+@router.get("/{tenant}/monitors/health", summary="Which monitors can be trusted, and which need a technician")
+def get_monitor_health(
+    tenant: str,
+    ts: Optional[str] = Query(None, description="End of the window, UTC hour; default: end of the data"),
+    days: int = Query(7, ge=1, le=60),
+) -> Dict[str, Any]:
+    """
+    Every monitor's status over the window — faulty, offline, suspect, healthy — with the
+    flag counts and one stretch of raw readings as evidence, so a claim that a
+    government monitor is broken can be checked by eye before anyone acts on it.
+    """
+    at = _parse_ts(ts) if ts else None
+    return integrity_mod.network_health(tenant, at=at, days=days)
 
 
 @router.get("/{tenant}/alerts", summary="The mock alert inbox")

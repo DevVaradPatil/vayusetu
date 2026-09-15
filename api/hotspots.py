@@ -6,10 +6,19 @@ as model estimate minus station interpolation, and that was falsified (TODO.md
 2026-09-08b): a positive residual was mostly model error. Nothing here uses a model.
 
 What is detected instead: a locality reading far above the regional field in the
-same hour. On 16 November, Arya Nagar in Bahadurgarh read 918 ug/m3 while the median
-across 60-odd monitors was 207 — 4.4 times the number every dashboard displayed for
-that region. The reading was public the whole time. It was hidden by the average,
-which is the number GRAP decisions are actually taken on.
+same hour, on a monitor whose readings can be trusted, for long enough to act on. On 30
+October, NSIT Dwarka read 629 and then 507 µg/m³ for three hours while the median across
+the region's monitors was 123 — four times the number every dashboard displayed, in a
+square kilometre where about 24,500 people live. The reading was public the whole time.
+It was hidden by the average, which is the number GRAP decisions are taken on.
+
+**The first version of this detector ranked a broken sensor as its worst event.** Arya
+Nagar in Bahadurgarh "read 918" on 16 November — inside a run of 717, 31, 559, 33, 500, 0,
+886, 4, 918, 19, 557, 0, 0, 0 while every monitor within 25 km held near 250-300. 22 of
+the 40 top-ranked events had faults like that nearby. So every outlier now passes
+`api/integrity.py` first, and must persist for two consecutive hours to be *confirmed*.
+Across the window that leaves 111 confirmed event-hours in 26 localities on 21 days, and
+excludes 51 outliers as sensor faults — which are reported, not hidden.
 
 Robust statistics (median and median absolute deviation) rather than mean and
 standard deviation, so one extreme locality cannot inflate the baseline it is being
@@ -38,25 +47,37 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+
+from api import integrity
 
 logger = logging.getLogger("vayusetu.api.hotspots")
 
 # A locality is flagged when it is both statistically unusual against its own city
 # AND high enough to matter for health. 3.5 is the conventional robust-outlier cut.
 # The absolute floors stop a clean day producing "hotspots" 20 ug/m3 above a low
-# median. Measured over the 26-day window these give 251 station-hours across 48
-# localities on all 26 days, so the rule is neither vacuous nor indiscriminate.
+# median. Before the integrity gate these gave 251 station-hours across 48 localities;
+# after it, 197 trusted and 111 confirmed (>= 2 h) across 26 localities on 21 days.
 STATION_ROBUST_Z = 3.5
 STATION_MIN_EXCESS = 50.0      # ug/m3 above the regional median
 STATION_MIN_VALUE = 90.0       # at least CPCB "Moderate"; below this nobody needs sending
 
 _MAD_TO_SIGMA = 1.4826         # MAD -> standard-deviation equivalent for a normal
 
+# An enforcement visit is sent for something that is still happening, not a one-hour
+# blip. A local event is *confirmed* when the same monitor was a trusted outlier for at
+# least this many consecutive hours. Single-hour outliers are still listed, marked
+# unconfirmed, and never raise an alert. Measured: the one-hour survivors of the integrity
+# gate included Pusa at 89 -> 254 -> 15, the pattern a sub-threshold glitch produces.
+CONFIRM_HOURS = 2
+
 METHOD = (f"A monitor is flagged when its robust z is at least {STATION_ROBUST_Z}, it is "
-          f"at least {STATION_MIN_EXCESS} ug/m3 above the regional median, and it reads at "
-          f"least {STATION_MIN_VALUE} ug/m3. Median and MAD are taken over every monitor "
-          f"reporting in that hour. Measurement only: no model, no interpolation.")
+          f"at least {STATION_MIN_EXCESS} ug/m3 above the regional median, it reads at "
+          f"least {STATION_MIN_VALUE} ug/m3, and the reading passes the integrity gate "
+          f"(no stuck values, dead zeros or one-hour spikes at that monitor within 3 hours). "
+          f"Median and MAD are taken over every monitor reporting in that hour. Measurement "
+          f"only: no model, no interpolation.")
 
 # Shared by both entry points: per-hour median and MAD over the reporting monitors.
 _ROBUST_SQL = """
@@ -103,6 +124,50 @@ def _row_to_entry(r: Any, median: float, sigma: float) -> Dict[str, Any]:
     }
 
 
+def _persistent_hours(station_id: str, at: datetime, tenant: str, project: Optional[str]) -> int:
+    """Consecutive hours, through `at`, that this monitor was a trusted outlier."""
+    series, _, regional, flags = integrity._data(tenant, project)
+    s, f = series.get(station_id, {}), flags.get(station_id, {})
+
+    def outlier(h: datetime) -> bool:
+        if h not in s or h not in regional:
+            return False
+        med, mad = regional[h]
+        excess = s[h] - med
+        return (mad > 0 and excess / (mad * _MAD_TO_SIGMA) >= STATION_ROBUST_Z
+                and excess >= STATION_MIN_EXCESS and s[h] >= STATION_MIN_VALUE
+                and integrity.trusted(f, h))
+
+    def distinct(a: datetime, b: datetime) -> bool:
+        # An exact repeat is not a second observation: a logger re-sending its last value
+        # would otherwise "confirm" itself. Mandir Marg read 472.0, 472.0, then 120.
+        return abs(s[a] - s[b]) > integrity.STUCK_TOLERANCE
+
+    if not outlier(at):
+        return 0
+    hour, n = timedelta(hours=1), 1
+    cur = at
+    while outlier(cur - hour) and distinct(cur - hour, cur):
+        n, cur = n + 1, cur - hour
+    cur = at
+    while outlier(cur + hour) and distinct(cur + hour, cur):
+        n, cur = n + 1, cur + hour
+    return n
+
+
+def _gate(entry: Dict[str, Any], at: datetime, tenant: str, project: Optional[str]) -> Dict[str, Any]:
+    """A statistical outlier is a hotspot only if the reading passes the integrity gate."""
+    ok = integrity.is_trusted(entry["station_id"], at, tenant, project)
+    entry["trusted"] = ok
+    entry["integrity_flags"] = integrity.reading_flags(entry["station_id"], at, tenant, project)
+    entry["outlier_but_untrusted"] = entry["is_hotspot"] and not ok
+    entry["is_hotspot"] = entry["is_hotspot"] and ok
+    entry["persistent_hours"] = (_persistent_hours(entry["station_id"], at, tenant, project)
+                                 if entry["is_hotspot"] else 0)
+    entry["confirmed"] = entry["persistent_hours"] >= CONFIRM_HOURS
+    return entry
+
+
 def station_hotspots(ts_str: str, tenant: str = "ncr", project: Optional[str] = None) -> Dict[str, Any]:
     """
     Localities standing above the regional field for one hour.
@@ -136,7 +201,10 @@ def station_hotspots(ts_str: str, tenant: str = "ncr", project: Optional[str] = 
 
     median = float(rows[0].regional_median)
     mad = float(rows[0].mad or 0.0)
-    field: List[Dict[str, Any]] = [_row_to_entry(r, median, mad * _MAD_TO_SIGMA) for r in rows]
+    at = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    field: List[Dict[str, Any]] = [
+        _gate(_row_to_entry(r, median, mad * _MAD_TO_SIGMA), at, tenant, project) for r in rows
+    ]
 
     return {
         "ts": ts_str,
@@ -146,6 +214,10 @@ def station_hotspots(ts_str: str, tenant: str = "ncr", project: Optional[str] = 
         "n_reporting": len(field),
         "method": METHOD,
         "hotspots": [f for f in field if f["is_hotspot"]],
+        # Statistical outliers the integrity gate refused. Shown, not hidden: a monitor
+        # that looks like the worst pollution in the region but is broken is itself a
+        # finding an official needs, and it explains why a visible spike raised nothing.
+        "excluded_as_sensor_fault": [f for f in field if f["outlier_but_untrusted"]],
         "field": field,
     }
 
@@ -180,28 +252,35 @@ def top_events(tenant: str = "ncr", limit: int = 12,
         WHERE c.zs >= {STATION_ROBUST_Z} AND c.excess >= {STATION_MIN_EXCESS}
           AND c.pm25 >= {STATION_MIN_VALUE}
         ORDER BY c.zs DESC
-        LIMIT @limit
     """
-    rows = list(client.query(sql, job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("limit", "INT64", limit)],
-    )).result())
+    rows = list(client.query(sql).result())
 
-    events = []
+    events, excluded = [], 0
     for r in rows:
         e = _row_to_entry(r, float(r.regional_median), float(r.mad) * _MAD_TO_SIGMA)
+        e = _gate(e, r.ts, tenant, project)
+        if not e["is_hotspot"]:
+            excluded += 1
+            continue
         e["ts"] = r.ts.strftime("%Y-%m-%d %H:00:00")
         e["regional_median"] = float(r.regional_median)
         e["n_reporting"] = int(r.n_reporting)
         events.append(e)
 
-    return {"tenant": tenant, "method": METHOD, "events": events}
+    return {
+        "tenant": tenant,
+        "method": METHOD,
+        "events": events[:limit],
+        "trusted_events": len(events),
+        "excluded_as_sensor_fault": excluded,
+    }
 
 
 def demo() -> None:
     """
-    The detector has to tell a local event from a regional one. Both cases are
-    checked, because getting either wrong sends an enforcement team to the wrong
-    place — or sends nobody to a town breathing four times the regional figure.
+    The detector has to tell a real local event from a regional one AND from a broken
+    sensor. All three cases are checked, because getting any of them wrong sends an
+    enforcement team to the wrong place — or to a faulty box.
     """
     import pathlib
 
@@ -215,46 +294,47 @@ def demo() -> None:
 
     def show(label: str, hs: Dict[str, Any]) -> None:
         print(f"\n{label}")
-        print(f"  {hs['n_reporting']} monitors, regional median {hs['regional_median']} "
-              f"ug/m3, MAD {hs['spread_mad']}, {len(hs['hotspots'])} flagged")
+        print(f"  {hs['n_reporting']} monitors, regional median {hs['regional_median']} ug/m3, "
+              f"{len(hs['hotspots'])} flagged, {len(hs['excluded_as_sensor_fault'])} excluded as sensor faults")
         for f in hs["hotspots"][:6]:
             pop = f"{f['population_in_cell']:,} people" if f["population_in_cell"] else "population unknown"
-            print(f"    {f['pm25']:6.1f}  +{f['excess_over_median']:5.1f} over median  "
-                  f"z={f['robust_z']:5.1f}  {f['times_regional']}x  {pop}  {f['name'][:38]}")
+            print(f"    {f['pm25']:6.1f}  {f['times_regional']}x  z={f['robust_z']:5.1f}  "
+                  f"{f['persistent_hours']}h {'confirmed' if f['confirmed'] else 'unconfirmed'}  {pop}  {f['name'][:34]}")
+        for f in hs["excluded_as_sensor_fault"]:
+            print(f"    EXCLUDED {f['pm25']:6.1f}  flags {f['integrity_flags'] or ['fault nearby']}  {f['name'][:34]}")
         for f in hs["hotspots"]:
-            assert f["robust_z"] >= STATION_ROBUST_Z
-            assert f["excess_over_median"] >= STATION_MIN_EXCESS
-            assert f["pm25"] >= STATION_MIN_VALUE
-        assert all(a["excess_over_median"] >= b["excess_over_median"]
-                   for a, b in zip(hs["field"], hs["field"][1:])), "field must be ranked"
+            assert f["trusted"] and f["robust_z"] >= STATION_ROBUST_Z
+            assert f["excess_over_median"] >= STATION_MIN_EXCESS and f["pm25"] >= STATION_MIN_VALUE
 
-    # A local event: the region sat at a median of 207 while one town ran at 918.
-    local = station_hotspots("2025-11-16 06:00:00")
-    show("Local event, 16 Nov 11:30 IST", local)
-    assert local["hotspots"], "16 Nov 06:00Z is a known local event and must flag"
-    worst = local["hotspots"][0]
-    assert worst["robust_z"] > 10, worst
-    assert worst["times_regional"] > 3, worst
+    # A real, sustained local event on a healthy monitor.
+    local = station_hotspots("2025-10-30 08:00:00")
+    show("Local event, 30 Oct 13:30 IST", local)
+    dwarka = next((f for f in local["hotspots"] if f["name"].startswith("NSIT Dwarka")), None)
+    assert dwarka, "NSIT Dwarka at 30 Oct 08:00 UTC is a verified local event"
+    assert dwarka["confirmed"] and dwarka["persistent_hours"] >= 3, dwarka
+    assert dwarka["times_regional"] > 3, dwarka
 
-    # A regional episode: everything is severe at once, so nothing is an outlier.
-    # Reporting zero here is the correct answer, not a miss.
+    # The broken sensor that used to be the headline: an outlier, and refused.
+    broken = station_hotspots("2025-11-16 06:00:00")
+    show("Faulty sensor, 16 Nov 11:30 IST", broken)
+    assert any(f["name"].startswith("Arya Nagar") for f in broken["excluded_as_sensor_fault"]),         "Arya Nagar's 918 must be excluded as a sensor fault"
+    assert not any(f["name"].startswith("Arya Nagar") for f in broken["hotspots"])
+
+    # A regional episode: everything severe at once, so nothing is an outlier.
     regional = station_hotspots("2025-11-11 20:00:00")
     show("Regional episode, 12 Nov 01:30 IST", regional)
-    assert regional["n_reporting"] > 50, regional["n_reporting"]
-    assert not regional["hotspots"], "a uniformly severe region has no local outlier"
-    assert regional["regional_median"] > 250, "this hour should be severe city-wide"
+    assert regional["n_reporting"] > 50 and not regional["hotspots"]
+    assert regional["regional_median"] > 250
 
-    top = top_events(limit=8)
-    print(f"\nWorst local events in the window ({len(top['events'])}):")
+    top = top_events(limit=6)
+    print(f"\nSharpest trusted events ({top['trusted_events']} trusted, "
+          f"{top['excluded_as_sensor_fault']} excluded as faults):")
     for e in top["events"]:
-        print(f"    {e['ts']}  {e['pm25']:6.1f} vs {e['regional_median']:5.1f} median  "
-              f"z={e['robust_z']:5.1f}  {e['times_regional']}x  {e['name'][:38]}")
-    assert top["events"], "the window contains known local events"
-    assert all(a["robust_z"] >= b["robust_z"]
-               for a, b in zip(top["events"], top["events"][1:])), "events must be ranked by z"
-    assert len({e["ts"] for e in top["events"]}) > 1, "not all from one hour"
+        print(f"    {e['ts']}  {e['pm25']:6.1f} vs {e['regional_median']:5.1f}  "
+              f"z={e['robust_z']:5.1f}  {e['persistent_hours']}h  {e['name'][:34]}")
+    assert top["excluded_as_sensor_fault"] > 0 and all(e["trusted"] for e in top["events"])
 
-    print("\n[OK] flags the local event, stays silent on the regional one")
+    print("\n[OK] confirms a real local event, refuses a broken sensor, stays silent on a regional blanket")
 
 
 if __name__ == "__main__":

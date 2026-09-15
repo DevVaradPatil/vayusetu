@@ -18,6 +18,7 @@ VayuSetu answers the three questions that follow the number:
 | Question | Answered from |
 |---|---|
 | *What is happening?* | 70 real CPCB stations via OpenAQ |
+| *Can that monitor be trusted right now?* | Four integrity checks on every reading — stuck, dead zeros, impossible spikes, suspiciously low during an episode |
 | *Where is it worst, far beyond the average?* | Each monitor against the robust median of the monitors around it |
 | *Why?* | NASA FIRMS fire detections, sectored by ERA5 wind; boundary layer height |
 | *Who should act, and how urgently?* | Gemini, reasoning over the measured evidence |
@@ -32,32 +33,54 @@ The site has two views of the same hour. **For officials:** a map of monitors, f
 `GET /api/v1/ncr/episode?ts=2025-11-11T20:00:00Z` — 01:30 IST, the peak of the
 November 2025 Delhi smog event:
 
-> **Severe meteorological trapping combined with 35 upwind fires drives the elevated
-> pollution level.**
+> **Severe particulate pollution is driven by a collapsed boundary layer trapping
+> emissions combined with regional crop residue fires upwind.** (crop residue burning,
+> confidence 0.85)
 >
-> City PM2.5 reached 406.6 with a boundary layer height of 65.0 metres, creating a
-> collapsed inversion that traps local and incoming emissions. Wind coming from
-> 338.0 degrees carries smoke from 35 upwind fires within the sector. The current
-> pollutant concentration is 2.3 times the 14-day baseline mean.
+> The city PM2.5 has reached 407.3, which is 2.31 times the baseline 14-day mean. A
+> shallow boundary layer of 110.0 meters is severely trapping pollutants near the
+> surface. Additionally, 33 upwind fires detected in the 325.0 degree wind sector are
+> contributing to the heavy load.
 >
-> **IMMEDIATE** — State Pollution Control Board: enforce strict bans on open burning
-> and inspect industrial units
-> **HIGH** — Municipal Corporation: deploy mechanical street sweepers and water
-> sprinklers on arterial roads
+> **IMMEDIATE** — Municipal Enforcement Cell: deploy anti-smog guns and enforce strict
+> dust control measures across all active construction zones
+> **HIGH** — State Pollution Control Board: increase inspections on local industrial
+> units and prohibit open waste burning
 
-Every number in that brief is measured. None is generated.
+Every number in that brief is measured, from trusted readings only: two monitors
+reporting that hour (Arya Nagar and Sirifort) failed the integrity checks and are left
+out of the average and the analysis.
 
 ### The event the city average hid
 
-The same pipeline, 16 November at 11:30 IST. Every dashboard for the region showed
-**202 µg/m³** — bad, "Very Poor", an ordinary winter day. One monitor showed this:
+30 October, 13:30 IST. The median across the region's monitors was **123 µg/m³**. One
+healthy monitor read this, for three hours running:
 
-> **Arya Nagar, Bahadurgarh — 918 µg/m³. 4.4× the area around it, +711 µg/m³ above the
-> regional median, about 2,038 people in that square kilometre.**
+> **NSIT Dwarka, Delhi — 629, then 507 µg/m³. 4.1× the monitors around it, in a square
+> kilometre where about 24,500 people live.**
 
 That reading was public the whole time. It was hidden by the average, which is the
-number GRAP decisions are taken on. Across the 26-day window the rule finds **251
-station-hours across 48 localities on every single day**.
+number GRAP decisions are taken on. Across the window there are **111 confirmed
+event-hours in 26 localities on 21 days** — trusted readings, far above their
+surroundings, for at least two consecutive hours.
+
+### The event that wasn't — and why that is the feature
+
+The first version of this README led with *Arya Nagar, Bahadurgarh at 918 µg/m³*. It was
+a broken instrument. Its hours that morning ran **717, 31, 559, 33, 500, 0, 886, 4, 918,
+19, 557, 0, 0, 0** while every monitor within 25 km held steady near 250-300. 22 of the
+40 events our detector first ranked highest had faults like that nearby, and the same
+broken monitor was the anchor of our hero AI brief.
+
+That is not a quirk of our data. In 2025 only 270 of India's 562 real-time monitors gave
+stable data; 13 of Haryana's 31 went dark as October's smog built; Panipat read a flat
+183-187 for ten days while its neighbours were Severe. Any system that turns monitor
+readings into action — a hotspot, an alert, an inspection — will, without a gate, send
+people to broken boxes. So VayuSetu checks every reading first
+([`api/integrity.py`](api/integrity.py)), refuses 51 outliers as sensor faults, reports
+which monitors need a technician, and requires an event to persist before it dispatches
+anyone. The attribution finding survives the gate unchanged: on trusted readings only,
+upwind fires correlate **+0.57** and the boundary layer **−0.48** with daily PM2.5.
 
 At the peak of the smog episode the same detector reports **nothing** — median 457,
 every monitor severe together, no local outlier. That is the correct answer, and the
@@ -81,6 +104,7 @@ We tested it properly, and it does not hold on this data:
 | The model earns its place where stations are sparse | **No.** It loses *worse* as the network thins |
 | 72-hour forecaster beats diurnal persistence | **No.** Loses at every horizon (-5.5% to -59.9%) |
 | Day-ahead Severe-night warning beats the calendar | **No.** "Warn after 6 November" scores +0.71; the best weather rule, +0.61 |
+| The top-ranked hotspot is real pollution | **No.** It was a faulty monitor; 22 of the top 40 were. Every reading is now integrity-checked |
 | **Upwind fires + boundary layer explain the episodes** | **Yes.** r = **+0.55** and **-0.42** |
 
 Full evidence, including the numbers that killed each hypothesis, is in
@@ -251,6 +275,12 @@ be screened out, and no NO₂ anomaly in the window is spatially isolated — on
 48 cells cleared z ≥ 2 while the mean z of every other cell that day was 2.51. A detector
 that cannot tell a plume from a region-wide day should not be telling an officer where to
 go.
+
+**The integrity checks catch faults, not bias.** Stuck values, dead zeros and one-hour
+spikes are caught; a monitor that drifts smoothly out of calibration, or reads
+slightly low because it is sited under trees or sprayed with water, is not — the
+`low_in_episode` flag only catches the extreme case, and it is labelled a suspicion,
+never proof.
 
 **Attribution is correlational.** r = +0.55 between upwind fire count and city PM2.5
 over 26 days of one stubble season is a real, correctly-signed relationship with a

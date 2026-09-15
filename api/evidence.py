@@ -55,6 +55,9 @@ class Evidence:
     comparison: Dict[str, Any]
     population_exposed: Optional[int]
     missing_fields: List[str] = field(default_factory=list)
+    # Monitors reporting this hour whose readings failed api/integrity.py. Not in the
+    # city average and never the worst station.
+    monitors_excluded_as_faulty: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -115,6 +118,19 @@ def assemble(
 
     if not stations:
         raise ValueError(f"No station observations at {ts_str} for tenant {tenant}")
+
+    # Only readings that pass the integrity gate count. Without this the hero episode's
+    # "worst monitor" — the anchor for the whole upwind-fire analysis and the brief
+    # Gemini writes from it — was Arya Nagar at 768.9, inside a run of 642, 161, 587,
+    # 769, 0, 741. The worst trusted monitor that hour was Rohini at 710. Faulty zeros
+    # also dragged the city average down. Excluded monitors are named, not dropped
+    # silently, so the brief can say the network was degraded.
+    from api import integrity
+    trusted = [s for s in stations if integrity.is_trusted(s.station_id, ts, tenant, project)]
+    excluded = [s.station_name for s in stations if s not in trusted]
+    if not trusted:
+        raise ValueError(f"No trusted station observations at {ts_str} for tenant {tenant}")
+    stations = trusted
 
     city_pm25 = sum(float(s.pm25) for s in stations) / len(stations)
     worst = stations[0]
@@ -200,6 +216,7 @@ def assemble(
         city_pm25=round(city_pm25, 1),
         aqi_band=aqi_band(city_pm25),
         n_stations_reporting=len(stations),
+        monitors_excluded_as_faulty=excluded,
         worst_station={
             "name": worst.station_name,
             "pm25": round(float(worst.pm25), 1),
@@ -300,7 +317,7 @@ def to_event(evidence: Dict[str, Any], brief: Optional[Dict[str, Any]] = None) -
 def demo() -> None:
     """Assemble evidence for the frozen hero episode."""
     # The frozen hero episode: 2025-11-11 20:00Z = 01:30 IST, the peak of the real
-    # November 2025 Delhi smog event. 65 stations reporting, city mean 406.6 ug/m3.
+    # November 2025 Delhi smog event. 63 trusted stations, city mean 407.3 ug/m3.
     ev = assemble(datetime(2025, 11, 11, 20, 0, tzinfo=timezone.utc))
 
     assert ev.city_pm25 > 0
