@@ -107,6 +107,13 @@ it would have raised ~10,900 alerts, not 531. An inspection plan built on counts
 the wrong districts. The **Farm fires** desk shows both rankings side by side
 ([`ingestion/fire_ledger.py`](ingestion/fire_ledger.py)).
 
+From there it opens **cross-state notices**. Each is a verification notice to Punjab's or
+Haryana's board, copied to CAQM, for each of the nine districts whose burning has most
+outrun its alerts. It does not say "Punjab caused Delhi's Severe day". We tested that
+and the data cannot support it: after removing the seasonal trend, wind-carried Punjab
+fires explain Delhi's daily PM2.5 at r = +0.32. A notice's outcome is the next season's burn
+scars, so until then it can only close "without proof".
+
 ---
 
 ## What we learned by testing our own idea
@@ -125,6 +132,7 @@ We tested it properly, and it does not hold on this data:
 | 72-hour forecaster beats diurnal persistence | **No.** Loses at every horizon (-5.5% to -59.9%) |
 | Day-ahead Severe-night warning beats the calendar | **No.** "Warn after 6 November" scores +0.71; the best weather rule, +0.61 |
 | The top-ranked hotspot is real pollution | **No.** It was a faulty monitor; 22 of the top 40 were. Every reading is now integrity-checked |
+| Punjab's fires, carried by the wind, explain Delhi's day-to-day PM2.5 | **No.** r = +0.32 once the seasonal trend is removed (23 days). Notices go to districts, not blame to a state for a day |
 | Daily burned area explains Delhi's PM2.5 better than fire alerts | **No.** r = −0.66: smoke hides the burn scars on the worst days. Used for the district ledger only |
 | **Upwind fires + boundary layer explain the episodes** | **Yes.** r = **+0.55** and **-0.42** |
 

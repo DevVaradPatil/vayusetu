@@ -21,6 +21,10 @@ BASELINE_SEASONS = (2020, 2021)
 # Below these, a ratio is noise: a district with 12 alerts can swing 5× on one field.
 MIN_BASELINE_DETECTIONS = 50
 MIN_BURNED_KM2 = 25.0
+# A district warrants a verification notice to its state board when its burning is both
+# large and far out of step with its own alert count. 2025: nine districts, eight in Punjab.
+NOTICE_MIN_FACTOR = 8.0
+NOTICE_MIN_KM2 = 200.0
 
 
 def _ratio(burned: float, det: int) -> Optional[float]:
@@ -73,9 +77,12 @@ def build_ledger(rows: List[dict], season: Optional[int] = None) -> Dict:
         d["rank_by_detections"] = i + 1
     for i, d in enumerate(by_area):
         d["rank_by_burned_area"] = i + 1
+        d["warrants_notice"] = bool(d["undercount_factor"] and d["undercount_factor"] >= NOTICE_MIN_FACTOR
+                                    and d["burned_km2"] >= NOTICE_MIN_KM2)
 
     return {
         "season": season, "seasons": seasons, "baseline_seasons": list(BASELINE_SEASONS),
+        "notice_rule": {"min_undercount_factor": NOTICE_MIN_FACTOR, "min_burned_km2": NOTICE_MIN_KM2},
         "trend": trend, "districts": by_area,
         "sources": {
             "burned_area": "NASA MODIS MCD64A1 burn scars, 500 m, 1 Oct - 30 Nov (Google Earth Engine)",
@@ -130,6 +137,7 @@ def demo() -> None:
     assert d["Counted"]["rank_by_detections"] == 1 and d["Counted"]["rank_by_burned_area"] == 2
     assert d["Hidden"]["rank_by_detections"] == 2 and d["Hidden"]["rank_by_burned_area"] == 1
     assert d["Tiny"]["undercount_factor"] is None                        # too few baseline alerts
+    assert d["Hidden"]["warrants_notice"] and not d["Counted"]["warrants_notice"] and not d["Tiny"]["warrants_notice"]
     assert out["trend"]["Punjab"][-1]["day_detections"] == 1062
     print("[OK] fire ledger: ratio against own baseline, ranks disagree, small districts withheld")
 

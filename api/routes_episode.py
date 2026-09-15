@@ -278,6 +278,19 @@ def raise_cases(tenant: str, ts: str = Query(...)) -> Dict[str, Any]:
     return cases_mod.raise_for_hour(_parse_ts(ts).strftime("%Y-%m-%d %H:00:00"), tenant)
 
 
+@router.post("/{tenant}/cases/raise-fire-notices", summary="Open verification notices for districts the fire ledger flags")
+def raise_fire_notices(tenant: str) -> Dict[str, Any]:
+    """
+    One notice per flagged district, to its state board, copied to CAQM; open work is not
+    duplicated. Raised from the seasonal ledger, not from an hour: a daily Punjab-to-Delhi
+    link was tested and is too weak to name a state as the cause of a given day.
+    """
+    try:
+        return cases_mod.raise_fire_notices(tenant)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 _CASE_ID = r"^case_[0-9a-f]{16}$"
 
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Fire, Warning } from '@phosphor-icons/react';
 import InfoTip from './InfoTip';
-import { fetchFireLedger, type FireDistrict, type FireLedger } from '../lib/data';
+import { fetchFireLedger, raiseFireNotices, type FireDistrict, type FireLedger } from '../lib/data';
 import { EXPLAIN } from '../lib/plain';
 
 /**
@@ -55,6 +55,8 @@ export default function FarmFires() {
           <div className="ff-states fade">
             {Object.entries(data.trend).map(([state, seasons]) => <StateTrend key={state} state={state} seasons={seasons} base={data.baseline_seasons} />)}
           </div>
+
+          <NoticeBar ledger={data} />
 
           <div className="ff-head">
             <h3 className="ff-sub">Districts, {data.season} season</h3>
@@ -132,8 +134,45 @@ function StateTrend({ state, seasons, base }: { state: string; seasons: FireLedg
   );
 }
 
+/**
+ * Cross-state notices. Deliberately raised from the season's ledger, not from a smog hour:
+ * a day-to-day Punjab-to-Delhi link was tested and is too weak to blame a state for a day.
+ */
+function NoticeBar({ ledger }: { ledger: FireLedger }) {
+  const flagged = ledger.districts.filter(d => d.warrants_notice);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  if (!flagged.length) return null;
+  const rule = ledger.notice_rule;
+  const open = async () => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await raiseFireNotices();
+      setMsg(r.opened ? `Opened ${r.opened} notice${r.opened === 1 ? '' : 's'}.` : 'These notices are already open.');
+    } catch (e) {
+      setMsg(String((e as Error).message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="al-bar">
+      <span className="al-ready">
+        {flagged.length} districts burned at least {rule.min_undercount_factor}× their old land per alert, over
+        at least {rule.min_burned_km2} km². Each warrants a ground-verification notice to its state board,
+        copied to CAQM. Demo accounts only.
+      </span>
+      <button type="button" className="btn btn--primary" disabled={busy} onClick={open}>
+        {busy ? 'Opening…' : 'Open verification notices'}
+      </button>
+      {msg && <span className="al-quiet">{msg} <a href="#/cases">See Cases</a></span>}
+    </div>
+  );
+}
+
 function DistrictRow({ d }: { d: FireDistrict }) {
-  const big = d.undercount_factor != null && d.undercount_factor >= 8;
+  const big = d.warrants_notice;
   return (
     <tr className={big ? 'ff-row--hidden' : undefined}>
       <th scope="row">{d.district}<span className="ff-state-tag">{d.state}</span></th>

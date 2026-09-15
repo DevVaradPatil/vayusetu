@@ -192,7 +192,7 @@ export interface HotspotHour {
   field: Hotspot[];
 }
 
-export type CaseKind = 'local_event' | 'monitor_fault' | 'regional_episode';
+export type CaseKind = 'local_event' | 'monitor_fault' | 'regional_episode' | 'fire_verification';
 export type CaseStatus = 'open' | 'in_progress' | 'closed_verified' | 'closed_unverified';
 
 /** One stretch of what the measurements showed after the event, used to verify closure. */
@@ -358,12 +358,14 @@ export interface FireDistrict {
   alerts_expected_at_baseline: number | null;
   rank_by_detections: number;
   rank_by_burned_area: number;
+  warrants_notice: boolean;
 }
 
 export interface FireLedger {
   season: number;
   seasons: number[];
   baseline_seasons: number[];
+  notice_rule: { min_undercount_factor: number; min_burned_km2: number };
   trend: Record<string, FireSeason[]>;
   districts: FireDistrict[];
   sources: Record<string, string>;
@@ -386,6 +388,9 @@ const post = async <T>(path: string, body?: FormData): Promise<T> => {
 
 /** Opening cases is a deliberate POST, never something a page load can do. */
 export const raiseCases = (ts: string) => post<{ opened: number }>(`/api/v1/${TENANT}/cases/raise?${q(ts)}`);
+
+export const raiseFireNotices = () =>
+  post<{ candidates: number; opened: number }>(`/api/v1/${TENANT}/cases/raise-fire-notices`);
 
 export const acknowledgeCase = (id: string, actor: string, note = '') =>
   post<{ status: string }>(`/api/v1/${TENANT}/cases/${id}/acknowledge?actor=${encodeURIComponent(actor)}&note=${encodeURIComponent(note)}`);

@@ -531,6 +531,7 @@ own (rule R4), and the resident page tells people so.
 | `POST /api/v1/{tenant}/cases/{id}/acknowledge?actor=` | Take ownership, as a named demo account |
 | `POST /api/v1/{tenant}/cases/{id}/close` (multipart) | Photo + note + location; closes only if the evidence and the measurements agree |
 | `GET /api/v1/{tenant}/fires/ledger?season=` | Per district: land burned vs fire alerts against its own 2020-21 rate, both ranks (§6b) |
+| `POST /api/v1/{tenant}/cases/raise-fire-notices` | Open a verification notice per flagged district, to its state board (§6b) |
 
 Two design decisions:
 
@@ -590,6 +591,7 @@ falsified (§2.4). Triggers live in `api/alerts.py`:
 | `local_event` | A **confirmed** hyper-local event (§4a) | The town's municipal body | The state board | 24 h |
 | `monitor_fault` | A government monitor is `faulty` or `offline` (§4b) | The monitor's operator | The state board | 72 h |
 | `regional_episode` | Regional median ≥ 250 (CPCB Severe) | The state board | CAQM | 12 h |
+| `fire_verification` | A district's burn scars ≥ 8× its old land per fire alert, ≥ 200 km² (§6b) | Punjab's or Haryana's state board | CAQM | 7 days |
 
 **Routing needs no lookup service.** Every monitor's name carries its operator and town —
 `NSIT Dwarka, Delhi - CPCB`, `Arya Nagar, Bahadurgarh - HSPCB` — so a fault goes to the
@@ -717,6 +719,25 @@ only reads 216 rows, so Cloud Run needs no Earth Engine client or geometry libra
 - Daily burned area as the attribution input correlates **negatively** with Delhi PM2.5
   (r = −0.655), most likely because the smoke hides the burn scars on the worst days. So
   the attribution in §4 keeps using detections, and undercounts recent seasons.
+
+### Cross-state notices
+
+The track asks for cross-boundary action, and Delhi's winter politics is about Punjab. The
+obvious notice, *"Punjab's fires caused Delhi's Severe day"*, was tested first and does not
+hold on this data. We counted Punjab detections, weighted by the hours the wind there blew
+toward Delhi, and compared them with Delhi's daily PM2.5. After removing the seasonal trend
+the best correlation was r = +0.32 over 23 days, out of 48 comparisons. That cannot name a
+state as the cause of a given day (`TODO.md`, 2026-09-15b).
+
+What the ledger does support is a **verification notice** (`fire_verification` case, §6a):
+one per district with at least 8× its old land per alert and 200 km² burned, sent to that
+state's board and copied to CAQM, with a 7-day deadline. The notice cites the scars, the
+alerts, and the alerts the burning would once have raised, and asks for ground checks
+including evenings. It is opened from the Farm fires desk (`POST /cases/raise-fire-notices`),
+one open notice per district. Its measured outcome is the next season's burn scars, so it
+closes `closed_unverified` on a note of measures taken until that season exists, and is
+refused if the next season is still over the threshold. For 2025 there are nine: eight in
+Punjab and Fatehabad in Haryana. Amritsar, first by alerts, is not among them.
 
 **Limits.** Relative indicators, not hectares: Punjab's 2025 total is below Sentinel-2
 estimates (~20,000 km²), and MCD64A1 is seeded by MODIS active fires, so the true gap is

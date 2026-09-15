@@ -121,6 +121,35 @@ Sangrur's 3,198 km² would have raised ~10,900 alerts; it raised 531.
   which the haze hides on the smoggiest days. Not usable day-to-day; **attribution keeps
   using detections, and so undercounts recent seasons' burning.**
 
+### Cross-state notices: the daily Punjab → Delhi link does not hold
+
+Tested before building notices that name a source state for a smog day. VIIRS S-NPP
+detections over all of Punjab and Haryana (our `raw_fires` stops at 30.75°N, 74.76°E and
+misses most of Punjab), weighted by the share of hours the ERA5 10 m wind at a point in each
+state blew toward Delhi (±45°, ≥ 1 m/s), summed over 48 h, at 0-3 day lags, against NCR
+daily PM2.5. 23 days (25 Oct - 19 Nov 2025, excluding 12-14 Nov when the S-NPP archive has
+a gap):
+
+| Fires | best r, raw | best r, trend removed | best r, day-to-day change |
+|---|---|---|---|
+| Punjab, all | −0.02 | −0.09 | +0.29 |
+| Punjab, wind toward Delhi | +0.38 (1 d) | **+0.32** (1 d) | +0.45 (1 d) |
+| Haryana, all | +0.63 | +0.36 | +0.18 |
+| Haryana, wind toward Delhi | +0.67 | **+0.37** | +0.23 |
+
+With the gap days included it is no better (Punjab wind-weighted +0.38 detrended). After
+removing the seasonal trend, nothing clears r ≈ 0.41 (p < 0.05 at n = 23), and these are
+the best of 48 comparisons. A 10 m wind at one point is a crude transport proxy and 2025
+detections undercount burning, so this does not show Punjab smoke *doesn't* reach Delhi.
+It shows this data cannot name a state as the cause of a given day.
+
+**Decision.** Cross-state notices are raised from the seasonal ledger, not from a smog
+hour: a `fire_verification` case per district with ≥ 8× its 2020-21 land per alert and
+≥ 200 km² burned, to that state's board, copied to CAQM, 7-day deadline. 2025: nine
+(eight Punjab, Fatehabad in Haryana); Amritsar, with the most alerts, gets none. The
+outcome is the next season's burn scars, so for now a notice can only close as
+`closed_unverified`.
+
 ### Limits
 
 MCD64A1 is seeded by MODIS active fires, so fires after the overpass can be under-mapped

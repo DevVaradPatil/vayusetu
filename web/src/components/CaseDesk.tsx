@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Broadcast, Camera, CheckCircle, ClockCountdown, Crosshair, FolderOpen, MapPin, Warning, Wind, XCircle,
+  Broadcast, Camera, CheckCircle, ClockCountdown, Crosshair, Fire, FolderOpen, MapPin, Warning, Wind, XCircle,
 } from '@phosphor-icons/react';
 import InfoTip from './InfoTip';
 import {
@@ -26,6 +26,7 @@ const KIND: Record<CaseKind, { label: string; Icon: typeof Warning }> = {
   local_event: { label: 'Local event', Icon: Crosshair },
   monitor_fault: { label: 'Monitor fault', Icon: Broadcast },
   regional_episode: { label: 'Region-wide', Icon: Wind },
+  fire_verification: { label: 'Farm fire notice', Icon: Fire },
 };
 
 const hoursText = (h: number) => {
@@ -251,7 +252,7 @@ function CloseForm({ c, actor, onDone }: { c: Case; actor: string; onDone: () =>
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ClosureResult | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const needsPhoto = c.kind !== 'regional_episode';
+  const needsPhoto = c.kind === 'local_event' || c.kind === 'monitor_fault';
 
   const locate = () => {
     setLocErr(null);
@@ -290,7 +291,9 @@ function CloseForm({ c, actor, onDone }: { c: Case; actor: string; onDone: () =>
       <label className="case-field">
         <span>{needsPhoto ? 'What was done (optional)' : 'Measures taken'}</span>
         <textarea rows={2} value={note} onChange={e => setNote(e.target.value)}
-                  placeholder={needsPhoto ? 'e.g. Garbage fire extinguished, site cleared' : 'e.g. GRAP stage III enforced: construction halted, trucks diverted'} />
+                  placeholder={needsPhoto ? 'e.g. Garbage fire extinguished, site cleared'
+                    : c.kind === 'fire_verification' ? 'e.g. Evening patrols in 40 villages; 212 fields inspected; balers deployed'
+                    : 'e.g. GRAP stage III enforced: construction halted, trucks diverted'} />
       </label>
       {needsPhoto && (
         <>
