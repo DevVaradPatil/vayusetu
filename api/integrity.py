@@ -191,8 +191,22 @@ def reading_flags(station_id: str, at: datetime, tenant: str = "ncr",
 
 def network_health(tenant: str = "ncr", project: Optional[str] = None,
                    at: Optional[datetime] = None, days: int = 7) -> Dict[str, Any]:
+    """Health of one tenant's monitors — `health()` over that tenant's loaded series."""
+    out = health(*_data(tenant, project), at=at, days=days)
+    out["tenant"] = tenant
+    return out
+
+
+def health(series: Dict[str, Dict[datetime, float]], meta: Dict[str, dict],
+           regional: Dict[datetime, Tuple[float, float]], flags: Dict[str, Dict[datetime, Set[str]]],
+           at: Optional[datetime] = None, days: int = 7) -> Dict[str, Any]:
     """
     Health of every monitor over the `days` before `at` (default: the end of the data).
+
+    Pure: the caller supplies the series and the regional field they should be judged
+    against. One monitor against the monitors around it only means something when
+    "around" is right, so the national ledger passes one state at a time rather than a
+    median of Kerala and Delhi together.
 
     Status is the thing an official acts on:
       - `faulty`   — fault flags on ≥ 5% of reported hours: send the maintenance contractor
@@ -200,14 +214,16 @@ def network_health(tenant: str = "ncr", project: Optional[str] = None,
       - `suspect`  — read far below neighbours during Severe hours: inspect the siting
       - `healthy`  — otherwise
     """
-    series, meta, regional, flags = _data(tenant, project)
-    all_hours = sorted(regional)
+    # Hours come from the regional field where there is one. A state with too few
+    # monitors to have a median still has monitors to judge on uptime, stuck values and
+    # spikes, so fall back to the hours they reported rather than returning nothing.
+    all_hours = sorted(regional) or sorted({h for s in series.values() for h in s})
     if not all_hours:
-        return {"tenant": tenant, "monitors": [], "summary": {}}
+        return {"monitors": [], "summary": {}}
     end = at or all_hours[-1]
     start = end - timedelta(days=days)
     window = [h for h in all_hours if start < h <= end]
-    severe = [h for h in window if regional[h][0] >= SEVERE_MEDIAN]
+    severe = [h for h in window if h in regional and regional[h][0] >= SEVERE_MEDIAN]
 
     monitors = []
     for sid, s in series.items():
@@ -262,7 +278,6 @@ def network_health(tenant: str = "ncr", project: Optional[str] = None,
     monitors.sort(key=lambda m: (order[m["status"]], -m["fault_rate"], m["uptime"]))
     summary = {k: sum(1 for m in monitors if m["status"] == k) for k in order}
     return {
-        "tenant": tenant,
         "window": [start.isoformat(), end.isoformat()],
         "method": ("stuck: identical value 3+ h; dead_zero: < 5 µg/m³ while regional median ≥ 60; "
                    "spike: up and back down ≥ 200 in one hour; low_in_episode: robust z ≤ -3.5 "
@@ -293,6 +308,17 @@ def demo() -> None:
     stuck = {h: (161.0 if 3 <= k <= 8 else 150.0 + k) for k, h in enumerate(hours)}
     fs = flag_series(stuck, regional)
     assert all("stuck" in fs[hours[k]] for k in range(3, 9)) and hours[2] not in fs, fs
+
+    # A state too thin for a peer median still gets judged on uptime and stuck values.
+    thin_hours = [t0 + k * _HOUR for k in range(30)]
+    thin = {"a": {h: 161.0 for h in thin_hours},
+            "b": {h: 90.0 + i for i, h in enumerate(thin_hours[:5])}}
+    thin_meta = {k: {"name": k, "lat": 0.0, "lon": 0.0} for k in thin}
+    thin_regional = regional_stats(thin.values())
+    assert thin_regional == {}, "two monitors cannot make a median"
+    thin_health = health(thin, thin_meta, thin_regional,
+                         {k: flag_series(v, thin_regional) for k, v in thin.items()}, days=30)
+    assert thin_health["summary"] == {"faulty": 1, "offline": 1, "suspect": 0, "healthy": 0}, thin_health["summary"]
 
     # Two identical hours is coincidence, not a fault.
     twice = {h: (161.0 if k in (4, 5) else 150.0 + k) for k, h in enumerate(hours)}

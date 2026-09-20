@@ -81,6 +81,38 @@ enabled, all three datasets and 16 tables created, and real data landed.
 
 ---
 
+## FINDING 2026-09-20 — the gate over all of India: 62 of 361 monitors, and an error code in the feed
+
+The integrity gate was built for NCR. Run nationally it is the same code with one change
+that matters: peers are per state (`integrity.health` was made pure so the caller supplies
+the peer group — a median of Kerala and Delhi is not a neighbourhood).
+
+Data: `backfill_stations.py --tenant india --providers CPCB,caaqm --pollutants pm25`,
+25 Oct - 20 Nov 2025 — 526 target sensors, 361 with data, **186,645 hourly rows**.
+Ledger: `ingestion/monitor_ledger.py` -> `vayusetu_shared.monitor_ledger`.
+
+| | |
+|---|---|
+| Not trustworthy | **62 of 361 (17%)** — 40 faulty, 22 offline |
+| At least one faulted hour | 240 (66%) |
+| Stuck at some point | 163 (45%), 4,429 hours |
+| Zero while the state was dirty | 79 (22%), 980 hours |
+| Worst states | Karnataka 14/23, Tamil Nadu 10/27, Andhra Pradesh 7/21, Maharashtra 7/69 |
+
+**A sentinel value is in the public feed.** Exactly 985.0 µg/m³ on 8 monitors across
+Karnataka and Tamil Nadu, 345 hours, 214 of them at B.Katihalli, Hassan while the rest of
+Karnataka read ~30. Worst stuck runs: Tata Township, Bileipada 469 h of 546 reported;
+Muzaffarpur Collectorate 366 h. Exactly 0.0 appears 4,516 times across 155 monitors.
+
+**Caveats.** OpenAQ's CPCB republication, not the full CAAQMS list. 13 of 26 states never
+have enough monitors reporting in an hour for a median, so dead-zero and low-in-episode
+cannot fire there — those rows carry `peer_group: false` and the desk labels them; a bug
+found while writing this returned *no rows at all* for such states, now covered by a
+self-check in `api/integrity.demo`. Three monitors fall outside every GAUL polygon and are
+labelled "Unknown" rather than dropped. One window only.
+
+---
+
 ## FINDING 2026-09-15b — fire counts undercount farm burning ~10×, and unevenly by district
 
 Researched for "detect hidden pollution sources". Fire counts are the number India's

@@ -609,6 +609,8 @@ button { font: inherit; color: inherit; }
 .ff-factor { display: inline-block; min-width: 3.2em; padding: 1px 6px; border-radius: var(--r-pill); background: var(--surface-container-high); font-weight: 700; text-align: center; }
 .ff-factor--big { background: var(--error-container); color: var(--on-error-container); }
 .ff-na { color: var(--on-surface-dim); }
+.nat-detail td { padding: 4px 10px 10px; }
+.nat-detail .mon-item { white-space: normal; }
 .ff-caveats { display: grid; gap: 4px; margin-top: 14px; padding-left: 18px; font-size: 13.5px; color: var(--on-surface-variant); line-height: 1.5; }
 
 /* ── Hotspot confirmation ─────────────────────────────────────────────────── */

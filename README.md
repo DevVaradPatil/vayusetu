@@ -22,6 +22,7 @@ VayuSetu answers the three questions that follow the number:
 | *Where is it worst, far beyond the average?* | Each monitor against the robust median of the monitors around it |
 | *Why?* | NASA FIRMS fire detections, sectored by ERA5 wind; boundary layer height |
 | *Who should act, and how urgently?* | Gemini, reasoning over the measured evidence |
+| *Can the rest of India's monitors be trusted?* | The same four checks over 361 CPCB monitors in 26 states, each against its own state's median |
 | *Are the fire counts still telling the truth?* | MODIS burn scars against VIIRS fire alerts, per Punjab and Haryana district, each against its own 2020-21 rate |
 | *Who owns it, by when — and was it really fixed?* | Cases routed to the responsible agency with deadlines; closure needs a Gemini-checked site photo **and** measurements showing the problem gone |
 
@@ -87,6 +88,28 @@ At the peak of the smog episode the same detector reports **nothing** — median
 every monitor severe together, no local outlier. That is the correct answer, and the
 page says so instead of showing an empty table: a regional blanket needs a region-wide
 response, a local plume needs an inspection team at one address.
+
+### The same check, over every monitor in India
+
+If a broken monitor can anchor our headline, it can anchor a state's. So the same four
+checks were run over **every CPCB monitor OpenAQ carries** — 361 monitors, 26 states,
+186,645 hourly readings from the same weeks:
+
+> **62 of 361 monitors (17%) could not be trusted**: 40 reporting impossible values, 22
+> dark more than half the time. **240 (66%) had at least one faulted hour.** Karnataka 14
+> of 23, Tamil Nadu 10 of 27.
+
+Two things fall out that nobody is watching for:
+
+- **Exactly 985.0 µg/m³** appears on 8 monitors in Karnataka and Tamil Nadu for 345 hours
+  — 214 of them at one monitor in Hassan, held flat while the rest of Karnataka read
+  about 30. That is an error code being published as a pollution reading.
+- **4,516 readings of exactly 0.0** across 155 monitors.
+
+Each monitor is judged against its own state's hourly median, never a national one, and
+states with too few monitors to form a median are labelled rather than reported clean.
+The **India** tab shows every state with the raw readings behind each verdict
+([`ingestion/monitor_ledger.py`](ingestion/monitor_ledger.py)).
 
 ### The fires the count stopped seeing
 
@@ -304,6 +327,12 @@ be screened out, and no NO₂ anomaly in the window is spatially isolated — on
 48 cells cleared z ≥ 2 while the mean z of every other cell that day was 2.51. A detector
 that cannot tell a plume from a region-wide day should not be telling an officer where to
 go.
+
+**The national ledger is one window, and only what OpenAQ republishes.** 361 CPCB
+monitors over 25 October - 20 November 2025, not the full CAAQMS list, and a monitor
+healthy then may be dark now. In the 13 states with too few monitors reporting together
+there is no peer median, so two of the four checks cannot fire there; those states are
+labelled "few monitors" rather than counted as clean.
 
 **The integrity checks catch faults, not bias.** Stuck values, dead zeros and one-hour
 spikes are caught; a monitor that drifts smoothly out of calibration, or reads

@@ -35,6 +35,7 @@ from api import cases as cases_mod
 from api import fires as fires_mod
 from api import hotspots as hotspots_mod
 from api import integrity as integrity_mod
+from api import national as national_mod
 
 logger = logging.getLogger("vayusetu.api.episode")
 
@@ -247,6 +248,19 @@ def get_fire_ledger(
     """
     try:
         return fires_mod.ledger(season)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/{tenant}/national/monitors", summary="Can India's air monitors be trusted? State by state")
+def get_national_monitors(tenant: str) -> Dict[str, Any]:
+    """
+    The same four integrity checks, run over every CPCB monitor OpenAQ carries for the
+    replay window, aggregated by state. Shared across tenants: a broken monitor is the
+    state board's work wherever the reader sits.
+    """
+    try:
+        return national_mod.national()
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

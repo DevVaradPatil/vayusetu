@@ -21,6 +21,17 @@ tenants:
     dataset: "vayusetu_lko"
     description: "Lucknow urban area"
 
+  india:
+    name: "India"
+    state: "All states"
+    bounds:
+      lat_min: 6.50
+      lon_min: 68.00
+      lat_max: 37.50
+      lon_max: 97.50
+    dataset: "vayusetu_india"
+    description: "Every government air monitor OpenAQ carries, for the national monitor ledger"
+
 shared:
   dataset: "vayusetu_shared"
   fire_buffer_km: 200

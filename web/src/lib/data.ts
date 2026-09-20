@@ -372,6 +372,43 @@ export interface FireLedger {
   caveats: string[];
 }
 
+export interface NationalMonitor {
+  station_id: string;
+  name: string;
+  status: MonitorStatus;
+  uptime: number;
+  fault_rate: number;
+  flag_counts: Record<string, number>;
+  example: { at: string; flags: string[]; readings: (number | null)[]; regional_median: (number | null)[] } | null;
+}
+
+export interface NationalState {
+  state: string;
+  monitors: number;
+  faulty: number;
+  offline: number;
+  suspect: number;
+  healthy: number;
+  untrusted: number;
+  untrusted_share: number;
+  peer_group: boolean;
+  worst: NationalMonitor[];
+}
+
+export interface NationalLedger {
+  window: [string, string];
+  summary: {
+    monitors: number; states: number; untrusted: number; untrusted_share: number;
+    faulty: number; offline: number; suspect: number; healthy: number;
+    states_without_peer_group: number;
+  };
+  states: NationalState[];
+  source: string;
+  caveats: string[];
+}
+
+export const fetchNational = () => get<NationalLedger>(`/api/v1/${TENANT}/national/monitors`);
+
 export const fetchFireLedger = () => get<FireLedger>(`/api/v1/${TENANT}/fires/ledger`);
 
 export const previewCases = (ts: string) => get<CasePreview>(`/api/v1/${TENANT}/cases/preview?${q(ts)}`);

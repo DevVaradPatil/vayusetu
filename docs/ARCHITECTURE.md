@@ -417,6 +417,57 @@ suits a replay; live ingestion would flag each hour as it lands.
 
 ---
 
+## 4c. The same gate, over every monitor in India
+
+**Files: `ingestion/monitor_ledger.py` (batch), `api/national.py`, `web/src/components/National.tsx`.**
+
+The integrity gate exists because our own headline hotspot was a broken sensor (§4b). That
+is not a Delhi problem: in 2025 only 270 of India's 562 real-time monitors gave stable
+data, 13 of Haryana's 31 went dark as the smog built, and Panipat read a flat 183-187 for
+ten days. Every state board runs a network it has little independent way of auditing.
+
+So the four checks run over **every CPCB monitor OpenAQ carries**, for the same
+25 October - 20 November 2025 window as the Delhi replay. `backfill_stations.py --tenant
+india` lands the hourly PM2.5 in `vayusetu_india.raw_stations`; the batch job writes one
+row per monitor — status, uptime, fault rate, flag counts, and one stretch of raw readings
+as evidence — to `vayusetu_shared.monitor_ledger`, and the desk reads it by state.
+
+Two things differ from the tenant run, and both are about what "the monitors around it"
+means:
+
+- **Peers are per state.** A monitor is judged against its state's own hourly median, not
+  a national one: a median of Kerala and Delhi together is not a neighbourhood. This is why
+  `integrity.network_health` was split into a pure `integrity.health(series, meta, regional,
+  flags)` — one definition of faulty, offline and suspect, fed whichever peer group is right.
+- **A thin state is not a clean state.** Below `MIN_MONITORS_FOR_MEDIAN` reporting in an
+  hour there is no median at all, so the two rules that need one — zeros during dirty air,
+  implausibly low during an episode — cannot fire there. Those rows carry
+  `peer_group: false` and the table labels them, rather than reporting a healthy network.
+
+**What it found.** 361 CPCB monitors across 26 states, 186,645 hourly readings:
+
+| | |
+|---|---|
+| Monitors a system should not act on | **62 of 361 (17%)** — 40 faulty, 22 dark more than half the window |
+| Monitors with at least one faulted hour | **240 (66%)** |
+| Monitors that reported a stuck value at some point | 163 (45%), 4,429 hours in total |
+| Monitors that reported zero while their state was dirty | 79 (22%), 980 hours |
+| Worst states by share | Karnataka 14 of 23, Tamil Nadu 10 of 27, Andhra Pradesh 7 of 21 |
+
+Two patterns are worth a state board's attention on their own:
+
+- **A sentinel value is reaching the public feed as a reading.** Exactly 985.0 µg/m³
+  appears on 8 monitors in Karnataka and Tamil Nadu for 345 hours — 214 of them at
+  B.Katihalli, Hassan, held flat while the rest of Karnataka read about 30. A number that
+  round, repeated across two states, is an instrument or pipeline code, not air.
+- **Zeros are common.** 4,516 readings of exactly 0.0 across 155 monitors. During dirty
+  hours they are flagged; a zero is a plausible reading only when the air is clean.
+
+It is also the honest test of the method: the same code, applied where we have no local
+knowledge to fall back on, and where a wrong call is a state board's wasted visit. Every
+row carries the readings that convict it, and the desk shows them, so a board can check
+the claim before sending anyone.
+
 ## 5. The AI layer
 
 **File: `api/gemini/brief.py`.** Gemini's job is the part nothing else in the stack
@@ -532,6 +583,7 @@ own (rule R4), and the resident page tells people so.
 | `POST /api/v1/{tenant}/cases/{id}/close` (multipart) | Photo + note + location; closes only if the evidence and the measurements agree |
 | `GET /api/v1/{tenant}/fires/ledger?season=` | Per district: land burned vs fire alerts against its own 2020-21 rate, both ranks (§6b) |
 | `POST /api/v1/{tenant}/cases/raise-fire-notices` | Open a verification notice per flagged district, to its state board (§6b) |
+| `GET /api/v1/{tenant}/national/monitors` | Every CPCB monitor's integrity status, by state, with evidence (§4c) |
 
 Two design decisions:
 
@@ -881,6 +933,17 @@ python -m api.evidence         # assemble the hero episode; validates against th
 python -m api.gemini.brief     # generate a brief and verify it against R5
 python -m ml.evaluate          # leave-one-station-out CV vs a real IDW baseline
 python -m ml.evaluate_forecast # per-horizon vs persistence and climatology
+python -m api.fires            # the district fire ledger's arithmetic, on toy rows
+python -m api.national         # the state table's aggregation, on toy rows
+```
+
+**Batch jobs behind the two ledgers** (minutes, not milliseconds; the service only reads
+their tables):
+
+```bash
+python -m ingestion.fire_ledger        # burn scars vs fire alerts, 2020-2025 -> vayusetu_shared.fire_ledger
+python backfill_stations.py --tenant india --from 2025-10-25 --to 2025-11-21        --providers CPCB,caaqm --pollutants pm25      # every CPCB monitor's hourly PM2.5
+python -m ingestion.monitor_ledger     # the integrity gate over all of them -> vayusetu_shared.monitor_ledger
 ```
 
 ---
@@ -908,6 +971,7 @@ and Cloud Run swallowing `/healthz`) are in `docs/DEPLOYMENT.md`.
 | `api/cases.py` | Case routing, deadlines, closure policy and outcome checks (§6a) |
 | `api/gemini/closure.py` | Gemini's description of a closure photo — describes, never decides (§6a) |
 | `ingestion/fire_ledger.py`, `api/fires.py` | Burn scars against fire alerts per district, and the ledger read by the desk (§6b) |
+| `ingestion/monitor_ledger.py`, `api/national.py` | The integrity gate over every CPCB monitor, by state (§4c) |
 | `api/gemini/brief.py` | Prompt, response schema, and the R5 verifier |
 | `api/gemini/advisory.py` | Translation into ten languages |
 | `api/routes_episode.py` | The product's endpoints, caching and generation lock |

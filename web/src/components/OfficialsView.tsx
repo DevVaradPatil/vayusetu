@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Broadcast, ClockCounterClockwise, Compass, Fire, FolderOpen, Pulse, Question, Warning } from '@phosphor-icons/react';
+import { Broadcast, ClockCounterClockwise, Compass, Fire, FolderOpen, MapTrifold, Pulse, Question, Warning } from '@phosphor-icons/react';
 import CaseDesk from './CaseDesk';
 import FarmFires from './FarmFires';
+import National from './National';
 import BriefPanel from './BriefPanel';
 import Guide from './Guide';
 import Hotspots from './Hotspots';
@@ -34,11 +35,11 @@ import { compassWords, EXPLAIN, inkOn } from '../lib/plain';
  * Sections of the officials desk, as hash routes so a link can point at one. The "now"
  * section stays mounted while another is shown: every new Google map is a billed load.
  */
-type Section = 'now' | 'monitors' | 'cases' | 'fires';
+type Section = 'now' | 'monitors' | 'cases' | 'fires' | 'national';
 const readSection = (): Section => {
   const h = window.location.hash;
   return h.startsWith('#/monitors') ? 'monitors' : h.startsWith('#/cases') ? 'cases'
-    : h.startsWith('#/fires') ? 'fires' : 'now';
+    : h.startsWith('#/fires') ? 'fires' : h.startsWith('#/national') ? 'national' : 'now';
 };
 
 const GUIDE_KEY = 'vayusetu-guide-hidden';
@@ -82,7 +83,7 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
   const [section, setSection] = useState<Section>(readSection);
   const [opened, setOpened] = useState<Record<Section, boolean>>(() => ({
     now: true, monitors: readSection() === 'monitors', cases: readSection() === 'cases',
-    fires: readSection() === 'fires',
+    fires: readSection() === 'fires', national: readSection() === 'national',
   }));
 
   useEffect(() => {
@@ -156,6 +157,9 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
           <a className="tab" href="#/fires" aria-current={section === 'fires' ? 'page' : undefined}>
             <Fire size={18} /> Farm fires
           </a>
+          <a className="tab" href="#/national" aria-current={section === 'national' ? 'page' : undefined}>
+            <MapTrifold size={18} /> India
+          </a>
         </div>
       </nav>
 
@@ -172,6 +176,11 @@ export default function OfficialsView({ ts, onTs, theme }: Props) {
       {opened.fires && (
         <div className="desk-section" hidden={section !== 'fires'}>
           <FarmFires />
+        </div>
+      )}
+      {opened.national && (
+        <div className="desk-section" hidden={section !== 'national'}>
+          <National />
         </div>
       )}
 

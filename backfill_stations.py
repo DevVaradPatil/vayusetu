@@ -20,6 +20,7 @@ import os
 import pathlib
 import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 warnings.filterwarnings("ignore")
@@ -36,6 +37,14 @@ from ingestion import common, stations  # noqa: E402
 
 NCR_BBOX = (28.20, 76.80, 28.95, 77.60)
 POLLUTANTS = {"pm25", "pm10"}
+
+
+def _bbox(tenant: str):
+    """The tenant's own bounds, so a national run is a --tenant flag, not an edit."""
+    import yaml
+    cfg = yaml.safe_load((pathlib.Path(__file__).parent / "infra" / "tenants.yaml").read_text())
+    b = (cfg.get("tenants") or {}).get(tenant, {}).get("bounds")
+    return (b["lat_min"], b["lon_min"], b["lat_max"], b["lon_max"]) if b else NCR_BBOX
 
 
 def _flush(buffer, d_from, dataset) -> int:
@@ -55,7 +64,11 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="Cap sensors, for a quick trial run")
     ap.add_argument("--local", action="store_true", help="Write to data/raw/ instead of BigQuery")
     ap.add_argument("--sleep", type=float, default=0.2, help="Pause between sensors, to be polite")
+    ap.add_argument("--workers", type=int, default=3, help="Parallel sensor fetches; keep the rate under 60/min")
     ap.add_argument("--batch-rows", type=int, default=20000, help="Flush to the sink every N rows")
+    ap.add_argument("--providers", default=None,
+                    help="Comma-separated OpenAQ providers to keep, e.g. CPCB,caaqm. Default: all")
+    ap.add_argument("--pollutants", default=None, help="Comma-separated, default pm25,pm10")
     args = ap.parse_args()
 
     d_from = datetime.strptime(args.date_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -68,13 +81,23 @@ def main() -> None:
 
     # Station metadata, unfiltered by liveness: a station that stopped reporting
     # last week still has valid history for the window we are asking about.
-    lat_min, lon_min, lat_max, lon_max = NCR_BBOX
-    data = stations._http_get_openaq(
-        "locations",
-        {"bbox": f"{lon_min},{lat_min},{lon_max},{lat_max}", "limit": 1000, "page": 1},
-        api_key,
-    )
-    locations = data.get("results", [])
+    lat_min, lon_min, lat_max, lon_max = _bbox(args.tenant)
+    providers = {p.strip().lower() for p in args.providers.split(",")} if args.providers else None
+    wanted = {p.strip() for p in args.pollutants.split(",")} if args.pollutants else POLLUTANTS
+    locations, page = [], 1
+    while True:                                  # India needs two pages; NCR one
+        data = stations._http_get_openaq(
+            "locations",
+            {"bbox": f"{lon_min},{lat_min},{lon_max},{lat_max}", "limit": 1000, "page": page},
+            api_key,
+        )
+        got = data.get("results", [])
+        locations += got
+        if len(got) < 1000 or page >= 10:
+            break
+        page += 1
+    if providers:
+        locations = [l for l in locations if ((l.get("provider") or {}).get("name") or "").lower() in providers]
 
     def _utc(loc, key):
         raw = (loc.get(key) or {}).get("utc")
@@ -89,6 +112,7 @@ def main() -> None:
     # A quarter of the NCR bbox last reported in 2018; asking them about 2025 is
     # ~30 wasted round-trips and an empty result each.
     targets = []
+    seen = set()
     n_out_of_range = 0
     for loc in locations:
         first, last = _utc(loc, "datetimeFirst"), _utc(loc, "datetimeLast")
@@ -96,11 +120,14 @@ def main() -> None:
         for sensor in loc.get("sensors", []):
             name = sensor.get("parameter", {}).get("name", "").lower()
             pollutant = stations.POLLUTANT_MAP.get(name)
-            if pollutant not in POLLUTANTS:
+            if pollutant not in wanted:
                 continue
             if not overlaps:
                 n_out_of_range += 1
                 continue
+            if (loc["id"], pollutant) in seen:
+                continue
+            seen.add((loc["id"], pollutant))
             targets.append((loc, sensor, pollutant))
 
     if args.limit:
@@ -113,13 +140,22 @@ def main() -> None:
     stations_with_data = 0
     buffer: list = []
 
-    for i, (loc, sensor, pollutant) in enumerate(targets, 1):
+    # One sensor is ~3 API round-trips of a few seconds each. Serially, a national run
+    # (526 sensors) takes about three hours, almost all of it waiting. A small pool keeps
+    # the request rate inside OpenAQ's 60/min while cutting that to well under an hour;
+    # the writes stay on this thread, so batching and ordering are unchanged.
+    def _one(job):
+        i, (loc, sensor, pollutant) = job
         raw = stations.fetch_sensor_measurements(sensor["id"], d_from, d_to, api_key)
         if not raw:
-            continue
-
+            return i, loc, pollutant, 0, []
         unit = sensor.get("parameter", {}).get("units", "µg/m³")
         recs = stations.measurements_to_hourly(raw, loc, pollutant, args.tenant, unit)
+        time.sleep(args.sleep)
+        return i, loc, pollutant, len(raw), recs
+
+    pool = ThreadPoolExecutor(max_workers=args.workers)
+    for i, loc, pollutant, n_raw, recs in pool.map(_one, enumerate(targets, 1)):
         if not recs:
             continue
 
@@ -129,7 +165,7 @@ def main() -> None:
 
         print(
             f"  [{i:3d}/{len(targets)}] {loc.get('name','?')[:28]:28s} {pollutant:5s} "
-            f"{len(raw):5d} raw -> {len(recs):4d} hourly"
+            f"{n_raw:5d} raw -> {len(recs):4d} hourly"
         )
 
         # Each BigQuery write is a load job plus a MERGE — roughly ten seconds
@@ -138,8 +174,6 @@ def main() -> None:
         if len(buffer) >= args.batch_rows:
             total_written += _flush(buffer, d_from, dataset)
             buffer.clear()
-
-        time.sleep(args.sleep)
 
     if buffer:
         total_written += _flush(buffer, d_from, dataset)
