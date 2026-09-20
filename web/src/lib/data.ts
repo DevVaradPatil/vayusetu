@@ -407,6 +407,20 @@ export interface NationalLedger {
   caveats: string[];
 }
 
+export interface LiveNow {
+  tenant: string;
+  modelled: {
+    at: string; cpcb_aqi: number | null; cpcb_category: string | null; universal_aqi: number | null;
+    dominant_pollutant: string | null; pm25: number | null; pm10: number | null; source: string;
+  };
+  measured: {
+    at: string | null; median_pm25: number | null; monitors: number; age_hours: number | null; source?: string;
+  };
+  note: string;
+}
+
+export const fetchLiveNow = () => get<LiveNow>(`/api/v1/${TENANT}/live/now`);
+
 export const fetchNational = () => get<NationalLedger>(`/api/v1/${TENANT}/national/monitors`);
 
 export const fetchFireLedger = () => get<FireLedger>(`/api/v1/${TENANT}/fires/ledger`);

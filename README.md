@@ -357,6 +357,11 @@ negatively with PM2.5, because smoke hides the scars), so recent seasons' fire s
 likely understated. The district ledger's figures are relative indicators, not hectares:
 500 m burn scars sit below Sentinel-2 estimates, and district boundaries are from 2015.
 
+**Live air is a modelled second opinion, clearly labelled.** Because the CPCB feed is
+stalled, the Monitors tab shows Google's Air Quality API reading for Delhi now, next to
+our own latest measurement and how old it is. The modelled number never enters a hotspot,
+a case, the integrity gate or the AI brief — those use measured readings only.
+
 **The demo is a replay, and says so.** The hero window is 10–13 November 2025, a real
 Severe episode with 68 of ~70 stations reporting. The same pipeline running live today
 sees 7 stations, because the CPCB-to-OpenAQ feed is largely stalled. Both views are in

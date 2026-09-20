@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Broadcast, CheckCircle, Warning, WifiSlash, Wrench } from '@phosphor-icons/react';
 import InfoTip from './InfoTip';
 import {
-  fetchMonitorHealth, fmtLong, type MonitorHealth, type MonitorStatus, type NetworkHealth,
+  band, fetchLiveNow, fetchMonitorHealth, fmtLong, type LiveNow, type MonitorHealth,
+  type MonitorStatus, type NetworkHealth,
 } from '../lib/data';
-import { EXPLAIN } from '../lib/plain';
+import { EXPLAIN, inkOn } from '../lib/plain';
 
 /**
  * Which air monitors can be trusted, and which need a technician.
@@ -89,6 +90,8 @@ export default function Monitors({ ts }: { ts: string }) {
         is used, each reading is checked for patterns real air does not produce.
       </p>
 
+      <RightNow />
+
       {err && <div className="error-box" role="alert"><Warning size={20} /><span>{err}</span></div>}
       {!data && !err && <div className="skeleton" style={{ height: 160, marginTop: 14 }} />}
 
@@ -128,6 +131,60 @@ export default function Monitors({ ts }: { ts: string }) {
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * The live second opinion.
+ *
+ * Everything else here is a replay, because the CPCB-to-OpenAQ feed that supplies our
+ * monitors is stalled. Google's Air Quality API is modelled rather than measured, so it
+ * is current regardless — which makes it the right thing to show beside our own latest
+ * reading and its age, and the wrong thing to feed into a hotspot or a case. Nothing
+ * downstream reads it.
+ */
+function RightNow() {
+  const [live, setLive] = useState<LiveNow | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    fetchLiveNow().then(setLive).catch(() => setFailed(true));
+  }, []);
+
+  if (failed) return null;
+  if (!live) return <div className="skeleton" style={{ height: 74, marginTop: 14 }} />;
+
+  const m = live.modelled;
+  const o = live.measured;
+  const b = m.pm25 != null ? band(m.pm25) : null;
+  const days = o.age_hours != null ? Math.round(o.age_hours / 24) : null;
+  return (
+    <div className="live-now fade">
+      <div className="live-col">
+        <span className="live-label">Right now, modelled</span>
+        <span className="live-value num">
+          {m.pm25 ?? '—'}<span className="live-unit">µg/m³ PM2.5</span>
+        </span>
+        <span className="live-sub">
+          {b && <span className="band-pill" style={{ background: b.color, color: inkOn(b.color) }}>{b.name}</span>}
+          {' '}NAQI {m.cpcb_aqi ?? '—'} · Google Air Quality, {fmtLong(m.at)}
+        </span>
+      </div>
+      <div className="live-col">
+        <span className="live-label">Our last measurement</span>
+        <span className="live-value num">
+          {o.median_pm25 ?? '—'}<span className="live-unit">µg/m³ median</span>
+        </span>
+        <span className="live-sub">
+          {o.monitors} monitor{o.monitors === 1 ? '' : 's'} · {days != null ? `${days} days old` : 'no reading'}
+        </span>
+      </div>
+      <p className="live-note">
+        The CPCB feed we depend on is stalled, so our own numbers are a replay of
+        October-November 2025. The modelled figure is shown for context only: hotspots,
+        cases and the brief use measured readings, never a model.
+      </p>
+    </div>
   );
 }
 

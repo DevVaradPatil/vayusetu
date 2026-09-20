@@ -35,6 +35,7 @@ from api import cases as cases_mod
 from api import fires as fires_mod
 from api import hotspots as hotspots_mod
 from api import integrity as integrity_mod
+from api import live as live_mod
 from api import national as national_mod
 
 logger = logging.getLogger("vayusetu.api.episode")
@@ -250,6 +251,21 @@ def get_fire_ledger(
         return fires_mod.ledger(season)
     except LookupError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/{tenant}/live/now", summary="Google's modelled air right now, next to our latest measurement")
+def get_live_now(tenant: str) -> Dict[str, Any]:
+    """
+    The honest live view. Our own station feed is stalled, so this puts Google's modelled
+    current conditions beside our most recent measured reading and says how old ours is.
+    The modelled number is never used by hotspots, cases or the brief.
+    """
+    try:
+        return live_mod.now(tenant)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except live_mod.AirQualityUnavailable as e:
+        raise HTTPException(status_code=503, detail=f"Google's air quality model is unavailable: {e}")
 
 
 @router.get("/{tenant}/national/monitors", summary="Can India's air monitors be trusted? State by state")

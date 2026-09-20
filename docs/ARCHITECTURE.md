@@ -132,6 +132,7 @@ All real. All ingested into BigQuery. Volumes are what is actually landed today.
 | **Google Earth Engine** | MAIAC 1 km AOD, Sentinel-5P NO₂, GHSL population, WorldCover land use, SRTM elevation | Daily / static | 1,755 cell-days + 66 static cells | ADC |
 | **Gemini 3.5 Flash Lite** | The reasoning step | On demand | — | Yes |
 | **Cloud Translation** | Ten Indian languages | On demand | — | ADC |
+| **Google Air Quality API** | Modelled current conditions and India's CPCB NAQI, anywhere | Hourly, on demand | 1 call per location per hour | ADC |
 
 Two notes worth knowing:
 
@@ -140,6 +141,19 @@ Two notes worth knowing:
 - **The live CPCB→OpenAQ feed is largely stalled.** 167 PM2.5 sensors exist in NCR;
   116 have history spanning Oct–Nov 2025; only **7** have reported in the last 72
   hours. This is why the demo is a replay (§9).
+
+### 3.2 The live second opinion
+
+**File: `api/live.py`.** The CPCB-to-OpenAQ feed we depend on is stalled — our most recent
+NCR reading is a fortnight old — which is why everything else here is a replay. Google's
+Air Quality API is modelled rather than measured, so it is current regardless, and it
+publishes India's own CPCB NAQI alongside its universal index. The Monitors tab shows it
+beside our latest measured reading, with that reading's age stated.
+
+It is context, never evidence: hotspots, cases, the integrity gate and the brief all run
+on measured station values only, for the same reason a citizen photo may not set a value
+(R4). One billed call per location per hour, cached. Authentication is the runtime service
+account, so **no API key exists in this codebase or its image**.
 
 ### 3.1 The grid
 
@@ -583,6 +597,7 @@ own (rule R4), and the resident page tells people so.
 | `POST /api/v1/{tenant}/cases/{id}/close` (multipart) | Photo + note + location; closes only if the evidence and the measurements agree |
 | `GET /api/v1/{tenant}/fires/ledger?season=` | Per district: land burned vs fire alerts against its own 2020-21 rate, both ranks (§6b) |
 | `POST /api/v1/{tenant}/cases/raise-fire-notices` | Open a verification notice per flagged district, to its state board (§6b) |
+| `GET /api/v1/{tenant}/live/now` | Google's modelled air now, beside our latest measurement and its age (§3.2) |
 | `GET /api/v1/{tenant}/national/monitors` | Every CPCB monitor's integrity status, by state, with evidence (§4c) |
 
 Two design decisions:
