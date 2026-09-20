@@ -75,7 +75,21 @@ Record from the live URL, not localhost. **Say the replay out loud** (checklist 
 
 ---
 
-## Deck outline (13 slides)
+## Deck
+
+Two files drive the real deck, and they are the source of truth for it:
+
+- **`docs/design.md`** — the visual system: canvas, grid, the two colour locks (blue is
+  interface, the CPCB ramp is data), type scale, chart rules, the evidence-block pattern,
+  six slide archetypes, accessibility. Paste into a design tool first.
+- **`docs/deck.md`** — 15 slides, each with kicker, headline, body copy, the exact data
+  behind every graphic, the verify line, and `[ASSET n]` markers for the screenshots only
+  a person can take (capture instructions in its Assets table).
+
+`docs/VayuSetu.pptx` (`python docs/build_deck.py`) is the plain generated fallback: same
+numbers, no art direction, with dashed placeholder boxes where ASSET 1-3 go.
+
+## Deck outline (the generated fallback, 13 slides)
 
 1. **Title** — VayuSetu: why the air is bad, where it is worst, who should act.
 2. **The problem** — a number and a colour; 30M people, ~40 official monitors; GRAP decisions taken on a city average.

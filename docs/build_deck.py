@@ -133,6 +133,44 @@ def _table(slide, headers, rows, top=Inches(2.1), col_widths=None):
     return table
 
 
+def _placeholder(slide, label: str, how: str, left=MARGIN, top=Inches(2.2),
+                 width=None, height=Inches(3.6)):
+    """
+    A visible gap where a screenshot or photo has to come from a person.
+
+    Left in the generated file on purpose: an honest "screenshot to come" box reads
+    better in a review than a slide that quietly lost the evidence it was built around.
+    docs/deck.md lists the capture instructions for each one.
+    """
+    width = width or (W - 2 * MARGIN)
+    box = slide.shapes.add_shape(1, left, top, width, height)
+    box.fill.solid()
+    box.fill.fore_color.rgb = BAND
+    box.line.color.rgb = RGBColor(0xDA, 0xDD, 0xE4)
+    box.line.width = Pt(1.5)
+    box.line.dash_style = 4                       # dashed
+    box.shadow.inherit = False
+    tf = box.text_frame
+    tf.word_wrap = True
+    tf.margin_left = tf.margin_right = Inches(0.4)
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER
+    r = p.add_run()
+    r.text = f"[ {label} ]"
+    r.font.size = Pt(17)
+    r.font.bold = True
+    r.font.color.rgb = DIM
+    r.font.name = "Segoe UI"
+    p2 = tf.add_paragraph()
+    p2.alignment = PP_ALIGN.CENTER
+    r2 = p2.add_run()
+    r2.text = how
+    r2.font.size = Pt(13)
+    r2.font.color.rgb = RGBColor(0x62, 0x67, 0x72)
+    r2.font.name = "Segoe UI"
+    return box
+
+
 def build() -> pathlib.Path:
     prs = Presentation()
     prs.slide_width, prs.slide_height = W, H
@@ -177,12 +215,11 @@ def build() -> pathlib.Path:
                   ("110 m", "air ceiling trapping it", INK),
                   ("33", "fires inside the upwind fan", RGBColor(0xEA, 0x58, 0x0C)),
                   ("0.85", "Gemini's confidence, cause: crop burning", BLUE)])
-    _bullets(s, [
-        "Gemini sees only measured evidence, and every number it cites is checked against the data "
-        "in code before anyone sees it.",
-        "Two monitors reporting that hour failed the integrity checks and were left out of the "
-        "average and the analysis.",
-    ], top=Inches(4.0))
+    _placeholder(s, "ASSET 1 — screenshot: officials view at the hero hour",
+                 "Open /#/ on the live site, set the time to 12 Nov 2025 01:30 IST, capture "
+                 "1600x1000 in the light theme. Must show the map with the wind fan, the four "
+                 "stat cards and the brief panel. Instructions: docs/deck.md.",
+                 top=Inches(3.9), height=Inches(2.9))
 
     # 5 — hidden hotspot
     s = _slide(prs, "The event the city average hid", "Hyper-local detection")
@@ -234,6 +271,10 @@ def build() -> pathlib.Path:
         "day later. The refusal, and its reason, go in the audit trail.",
         "Every agency and officer is a demo account: no real contact details exist in this codebase.",
     ])
+    _placeholder(s, "ASSET 2 (optional) — screenshot: a refused closure",
+                 "/#/cases -> submit a closure on the region-wide case with only a note. "
+                 "Capture the red refusal and its reason.",
+                 top=Inches(6.15), height=Inches(0.95))
 
     # 9 — farm fires
     s = _slide(prs, "The fires the count stopped seeing", "Cross-state")
@@ -258,6 +299,10 @@ def build() -> pathlib.Path:
         "reading but can never set a pollution value or trigger a response on its own.",
         "Installs as an app; the service worker never caches a reading.",
     ])
+    _placeholder(s, "ASSET 3 (optional) — screenshot: resident view in Hindi",
+                 "/#/residents with the language set to हिन्दी, showing the band, the advice "
+                 "and the Listen button.",
+                 top=Inches(5.6), height=Inches(1.4))
 
     # 11 — falsification
     s = _slide(prs, "We tested our own ideas, and published what failed", "Rigour")
@@ -320,6 +365,8 @@ def demo() -> None:
     for number in ("407.3", "629", "62 of 361", "985.0", "74,975", "+0.32", "84,765"):
         assert number in words, f"{number} missing from the deck"
     assert "predicted" not in words.lower() or "no predicted" in words.lower()
+    # Slides that stand on a screenshot must carry a visible placeholder until it arrives.
+    assert words.count("ASSET") >= 3, "asset placeholders missing"
     print(f"[OK] {path.name}: {len(prs.slides)} slides, every headline figure present")
 
 
