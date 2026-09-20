@@ -6,6 +6,7 @@ Walk this end to end before submitting. Every line is either a hard requirement 
 
 - [ ] **Source code** — public GitHub repo, or access granted to judges. Verify in a logged-out browser.
 - [ ] **Demo video** — 3–5 minutes, working end-to-end walkthrough. Not a slideshow.
+- [x] **Pitch deck** — `docs/VayuSetu.pptx`, 13 slides, regenerate with `python docs/build_deck.py`. Original line:
 - [ ] **Pitch deck** — 10–12 slides covering: problem, solution, AI approach, who it serves, why it is deployable, how it scales across India.
 - [x] **Brief description** — 2–3 lines. Drafted in `docs/SUBMISSION.md`.
 - [x] **Deployed link** — https://vayusetu-999960875509.asia-south1.run.app (verified 2026-09-13 from the deploy machine: site, hotspots, alerts, Gemini brief, Hindi translation and speech). Still to do by hand: **Test it from outside our network, on mobile data, in an incognito window.**
