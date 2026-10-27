@@ -19,6 +19,8 @@ from pptx.enum.text import PP_ALIGN
 from pptx.util import Emu, Inches, Pt
 
 OUT = pathlib.Path(__file__).resolve().parent / "VayuSetu.pptx"
+FINALS = OUT.parent / "VayuSetu_finals.pptx"
+ASSETS = OUT.parent / "deck_assets"          # screenshots of the live site, asset1.png ...
 
 INK = RGBColor(0x1A, 0x1C, 0x21)
 DIM = RGBColor(0x43, 0x47, 0x50)
@@ -134,15 +136,24 @@ def _table(slide, headers, rows, top=Inches(2.1), col_widths=None):
 
 
 def _placeholder(slide, label: str, how: str, left=MARGIN, top=Inches(2.2),
-                 width=None, height=Inches(3.6)):
+                 width=None, height=Inches(3.6), asset: str | None = None):
     """
-    A visible gap where a screenshot or photo has to come from a person.
+    The screenshot docs/deck_assets/<asset>, fitted and centred in the box — or, until a
+    person has captured it, a visible gap where it goes.
 
-    Left in the generated file on purpose: an honest "screenshot to come" box reads
-    better in a review than a slide that quietly lost the evidence it was built around.
+    The gap is left in on purpose: an honest "screenshot to come" box reads better in a
+    review than a slide that quietly lost the evidence it was built around.
     docs/deck.md lists the capture instructions for each one.
     """
     width = width or (W - 2 * MARGIN)
+    img = ASSETS / asset if asset else None
+    if img and img.exists():
+        from PIL import Image
+        iw, ih = Image.open(img).size
+        scale = min(width / iw, height / ih)
+        pw, ph = int(iw * scale), int(ih * scale)
+        return slide.shapes.add_picture(str(img), Emu(int(left + (width - pw) / 2)),
+                                        Emu(int(top + (height - ph) / 2)), pw, ph)
     box = slide.shapes.add_shape(1, left, top, width, height)
     box.fill.solid()
     box.fill.fore_color.rgb = BAND
@@ -219,7 +230,7 @@ def build() -> pathlib.Path:
                  "Open /#/ on the live site, set the time to 12 Nov 2025 01:30 IST, capture "
                  "1600x1000 in the light theme. Must show the map with the wind fan, the four "
                  "stat cards and the brief panel. Instructions: docs/deck.md.",
-                 top=Inches(3.9), height=Inches(2.9))
+                 top=Inches(3.85), height=Inches(3.35), asset="asset1.png")
 
     # 5 — hidden hotspot
     s = _slide(prs, "The event the city average hid", "Hyper-local detection")
@@ -274,7 +285,7 @@ def build() -> pathlib.Path:
     _placeholder(s, "ASSET 2 (optional) — screenshot: a refused closure",
                  "/#/cases -> submit a closure on the region-wide case with only a note. "
                  "Capture the red refusal and its reason.",
-                 top=Inches(6.15), height=Inches(0.95))
+                 top=Inches(6.15), height=Inches(0.95), asset="asset2.png")
 
     # 9 — farm fires
     s = _slide(prs, "The fires the count stopped seeing", "Cross-state")
@@ -298,11 +309,12 @@ def build() -> pathlib.Path:
         "A resident can send a photo of the haze; Gemini triages it, and it can corroborate a "
         "reading but can never set a pollution value or trigger a response on its own.",
         "Installs as an app; the service worker never caches a reading.",
-    ])
+    ], width=Inches(6.2))
     _placeholder(s, "ASSET 3 (optional) — screenshot: resident view in Hindi",
                  "/#/residents with the language set to हिन्दी, showing the band, the advice "
                  "and the Listen button.",
-                 top=Inches(5.6), height=Inches(1.4))
+                 left=MARGIN + Inches(6.5), top=Inches(2.0), width=Inches(5.0),
+                 height=Inches(4.9), asset="asset3.png")
 
     # 11 — falsification
     s = _slide(prs, "We tested our own ideas, and published what failed", "Rigour")
@@ -349,8 +361,32 @@ def build() -> pathlib.Path:
     return OUT
 
 
+def build_finals(src: pathlib.Path = OUT) -> pathlib.Path:
+    """
+    The finals cut: the live demo carries the talk, so the deck only opens and closes it.
+    Title and Rigour, then slides 4, 8 and 10 as a backup if the site is unreachable.
+    Run order and script: docs/FINALS.md.
+    """
+    prs = Presentation(src)
+    ids = prs.slides._sldIdLst
+    slides = list(ids)
+    keep = [slides[i - 1] for i in (1, 11, 4, 8, 10)]
+    for s in slides:
+        ids.remove(s)
+        if s not in keep:
+            prs.part.drop_rel(s.rId)
+    for s in keep:
+        ids.append(s)
+    prs.save(FINALS)
+    return FINALS
+
+
 def demo() -> None:
-    path = build()
+    finals = Presentation(build_finals(build()))
+    order = [" ".join(sh.text_frame.text for sh in sl.shapes if sh.has_text_frame)
+             for sl in finals.slides]
+    assert len(order) == 5 and "VayuSetu" in order[0] and "tested our own ideas" in order[1], order
+    path = OUT
     prs = Presentation(path)
     assert len(prs.slides) == 13, len(prs.slides)
     def texts(shape):
@@ -365,8 +401,9 @@ def demo() -> None:
     for number in ("407.3", "629", "62 of 361", "985.0", "74,975", "+0.32", "84,765"):
         assert number in words, f"{number} missing from the deck"
     assert "predicted" not in words.lower() or "no predicted" in words.lower()
-    # Slides that stand on a screenshot must carry a visible placeholder until it arrives.
-    assert words.count("ASSET") >= 3, "asset placeholders missing"
+    # Slides that stand on a screenshot carry it, or a visible placeholder until it arrives.
+    pictures = sum(sh.shape_type == 13 for sl in prs.slides for sh in sl.shapes)
+    assert words.count("ASSET") + pictures >= 3, "screenshots and their placeholders missing"
     print(f"[OK] {path.name}: {len(prs.slides)} slides, every headline figure present")
 
 
